@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:hydrodok/src/core/model/user_session.dart';
 import 'package:hydrodok/src/core/models/auth_models.dart';
 import 'package:hydrodok/src/core/repositories/auth_repository.dart';
 import 'package:hydrodok/main.dart';
@@ -31,6 +32,12 @@ class _FakeAuthRepository extends AuthRepository {
 
   @override
   Future<void> signIn(String email, String password) async {}
+
+  @override
+  Future<UserSession?> getCurrentSession() async => null;
+
+  @override
+  Future<void> signOut() async {}
 }
 
 void main() {

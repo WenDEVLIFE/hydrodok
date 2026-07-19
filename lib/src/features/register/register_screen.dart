@@ -18,10 +18,7 @@ import '../otp/otp_screen.dart';
 /// On [RegisterOtpSent] it navigates to [OtpScreen] for email verification,
 /// then finally to [LoginScreen].
 class RegisterScreen extends StatelessWidget {
-  /// Widget to navigate to after the final login (passed through OTP → Login).
-  final Widget onSuccess;
-
-  const RegisterScreen({super.key, required this.onSuccess});
+  const RegisterScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,14 +26,13 @@ class RegisterScreen extends StatelessWidget {
 
     return BlocProvider(
       create: (_) => RegisterBloc(authRepository: authRepository),
-      child: _RegisterForm(onSuccess: onSuccess),
+      child: const _RegisterForm(),
     );
   }
 }
 
 class _RegisterForm extends StatefulWidget {
-  final Widget onSuccess;
-  const _RegisterForm({required this.onSuccess});
+  const _RegisterForm();
 
   @override
   State<_RegisterForm> createState() => _RegisterFormState();
@@ -78,7 +74,6 @@ class _RegisterFormState extends State<_RegisterForm> {
             MaterialPageRoute(
               builder: (_) => OtpScreen(
                 signUpData: state.data,
-                onSuccess: widget.onSuccess,
               ),
             ),
           );

@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../model/user_session.dart';
 import '../models/auth_models.dart';
 import '../service/avatar_backfill.dart';
 import '../service/email_service.dart';
@@ -40,6 +41,12 @@ abstract class AuthRepository {
   /// Authenticates an existing user with [email] and [password].
   /// Throws on failure (wrong credentials, network error, etc.).
   Future<void> signIn(String email, String password);
+
+  /// Returns the current session if a user is signed in, or null if not.
+  Future<UserSession?> getCurrentSession();
+
+  /// Signs the current user out.
+  Future<void> signOut();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -202,6 +209,61 @@ class SupabaseAuthRepository implements AuthRepository {
     } catch (e) {
       debugPrint('AvatarBackfill failed during signIn: $e');
     }
+  }
+
+  // ── Session ───────────────────────────────────────────────────────────
+
+  @override
+  Future<UserSession?> getCurrentSession() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return null;
+
+    final result = await _supabase
+        .from('profiles')
+        .select('full_name, contact_number, role, avatar_url')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    if (result == null) return null;
+
+    // Try to fetch farm details (silently skip if not a farmer).
+    String farmName = '';
+    String farmAddress = '';
+    List<String> farmProduceTypes = [];
+    try {
+      final farmResult = await _supabase
+          .from('farms')
+          .select('farm_name, address, produce_types')
+          .eq('owner_id', user.id)
+          .maybeSingle();
+      if (farmResult != null) {
+        farmName = farmResult['farm_name'] as String? ?? '';
+        farmAddress = farmResult['address'] as String? ?? '';
+        final types = farmResult['produce_types'];
+        if (types is List) {
+          farmProduceTypes = types.cast<String>();
+        }
+      }
+    } catch (_) {
+      // Not a farmer or farm doesn't exist — fine.
+    }
+
+    return UserSession(
+      uid: user.id,
+      email: user.email ?? '',
+      fullName: result['full_name'] as String? ?? '',
+      phoneNumber: result['contact_number'] as String? ?? '',
+      role: result['role'] as String? ?? '',
+      profileImageUrl: result['avatar_url'] as String? ?? '',
+      farmName: farmName,
+      farmAddress: farmAddress,
+      farmProduceTypes: farmProduceTypes,
+    );
+  }
+
+  @override
+  Future<void> signOut() async {
+    await _supabase.auth.signOut();
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────

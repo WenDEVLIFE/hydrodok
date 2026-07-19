@@ -4,29 +4,27 @@ import '../../bloc/login/login_bloc.dart';
 import '../../bloc/login/login_event.dart';
 import '../../bloc/login/login_state.dart';
 import '../../core/repositories/auth_repository.dart';
+import '../../core/model/user_session.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import '../../widget/custom_button.dart';
 import '../../widget/custom_text_field.dart';
 import '../../widget/logo_widget.dart';
 import '../admin/admin_shell.dart';
+import '../main_shell.dart';
 import '../register/register_screen.dart';
 
 /// Full‑screen login form with email / password fields, client‑side
 /// validation, and a loading / error lifecycle driven by [LoginBloc].
 ///
-/// On successful login it navigates to [onSuccess] so the parent (typically
-/// `main.dart`) can decide what "logged in" means for the app.
+/// On successful login it routes to the correct shell based on the user's
+/// role (admin → [AdminShell], farmer/consumer → [MainShell]).
 class LoginScreen extends StatefulWidget {
-  /// Widget to navigate to after a successful login.
-  final Widget onSuccess;
-
   /// Provided by the parent to avoid context.read lookup inside BlocProvider.
   final AuthRepository authRepository;
 
   const LoginScreen({
     super.key,
-    required this.onSuccess,
     required this.authRepository,
   });
 
@@ -38,6 +36,16 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+
+  void _onLoginSuccess(UserSession session) {
+    if (!mounted) return;
+    final destination = session.role == 'admin'
+        ? const AdminShell()
+        : const MainShell();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => destination),
+    );
+  }
 
   @override
   void dispose() {
@@ -54,10 +62,8 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       child: BlocConsumer<LoginBloc, LoginState>(
         listener: (context, state) {
-          if (state is LoginSuccess && mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => widget.onSuccess),
-            );
+          if (state is LoginSuccess) {
+            _onLoginSuccess(state.session);
           }
           if (state is LoginFailure && mounted) {
             showDialog(
@@ -177,9 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           GestureDetector(
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => RegisterScreen(
-                                  onSuccess: widget.onSuccess,
-                                ),
+                                builder: (_) => const RegisterScreen(),
                               ),
                             ),
                             child: Text(
@@ -192,14 +196,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 12),
 
-                      // ── DEV: Skip login ──────────────────────────────
+                      // ── DEV: Skip to App ──────────────────────────────
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
                           onPressed: () => Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (_) => widget.onSuccess),
+                            MaterialPageRoute(
+                              builder: (_) => const MainShell(),
+                            ),
                           ),
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(
@@ -225,7 +231,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         width: double.infinity,
                         child: OutlinedButton(
                           onPressed: () => Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (_) => const AdminShell()),
+                            MaterialPageRoute(
+                              builder: (_) => const AdminShell(),
+                            ),
                           ),
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(

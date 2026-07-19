@@ -1,3 +1,5 @@
+import '../../core/model/user_session.dart';
+
 /// Possible states of the login form lifecycle.
 sealed class LoginState {
   const LoginState();
@@ -13,9 +15,10 @@ final class LoginLoading extends LoginState {
   const LoginLoading();
 }
 
-/// Authentication succeeded — navigate to the main screen.
+/// Authentication succeeded — navigate to the correct shell.
 final class LoginSuccess extends LoginState {
-  const LoginSuccess();
+  final UserSession session;
+  const LoginSuccess(this.session);
 }
 
 /// Authentication failed — show an error message.

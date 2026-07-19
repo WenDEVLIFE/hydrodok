@@ -7,8 +7,6 @@ import 'src/core/repositories/auth_repository.dart';
 import 'src/core/service/email_service.dart';
 import 'src/core/service/profile_service.dart';
 import 'src/core/utils/color_utils.dart';
-import 'src/features/login/login_screen.dart';
-import 'src/features/main_shell.dart';
 import 'src/features/splash_screen/splash_screen.dart';
 
 void main() async {
@@ -73,23 +71,7 @@ class HydrodokApp extends StatelessWidget {
         colorScheme: ColorUtils.darkColorScheme,
         useMaterial3: true,
       ),
-      home: const SplashScreen(nextScreen: _AfterSplash()),
+      home: const SplashScreen(),
     );
   }
 }
-
-/// What the user sees after the splash animation finishes.
-/// Routes to login; on success, goes to the main app shell.
-class _AfterSplash extends StatelessWidget {
-  const _AfterSplash();
-
-  @override
-  Widget build(BuildContext context) {
-    return LoginScreen(
-      authRepository: context.read<AuthRepository>(),
-      onSuccess: const MainShell(),
-    );
-  }
-}
-
-

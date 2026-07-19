@@ -4,12 +4,26 @@ import 'package:hydrodok/src/bloc/login/login_bloc.dart';
 import 'package:hydrodok/src/bloc/login/login_event.dart';
 import 'package:hydrodok/src/bloc/login/login_state.dart';
 import 'package:hydrodok/src/core/repositories/auth_repository.dart';
+import 'package:hydrodok/src/core/model/user_session.dart';
 
 class _MockAuthRepository extends Mock implements AuthRepository {}
 
 /// Matcher for [LoginFailure] with [error] text.
 Matcher isLoginFailure(String error) => isA<LoginFailure>()
     .having((s) => s.error, 'error', error);
+
+/// Test session returned by the auth repo after a successful login.
+final _testSession = UserSession(
+  uid: 'test-uid',
+  email: 'test@example.com',
+  fullName: 'Test User',
+  phoneNumber: '1234567890',
+  role: 'farmer',
+  profileImageUrl: '',
+  farmName: '',
+  farmAddress: '',
+  farmProduceTypes: const [],
+);
 
 void main() {
   late AuthRepository authRepository;
@@ -108,6 +122,8 @@ void main() {
         () async {
       when(() => authRepository.signIn('test@example.com', 'password123'))
           .thenAnswer((_) async {});
+      when(() => authRepository.getCurrentSession())
+          .thenAnswer((_) async => _testSession);
 
       bloc.add(const LoginEmailChanged('test@example.com'));
       bloc.add(const LoginPasswordChanged('password123'));

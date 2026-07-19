@@ -14,18 +14,16 @@ import '../login/login_screen.dart';
 
 /// Full‑screen OTP verification with a 6‑digit code input.
 ///
-/// On [OtpSuccess] it navigates to [LoginScreen] with [onSuccess] so the
-/// login screen knows where to go after the user signs in.
-/// The account is created (via [AuthRepository.signUp]) only after
-/// successful OTP verification (handled inside [OtpBloc]).
+/// On [OtpSuccess] it navigates to [LoginScreen] so the user can sign in
+/// with the newly‑created account. The account is created (via
+/// [AuthRepository.signUp]) only after successful OTP verification (handled
+/// inside [OtpBloc]).
 class OtpScreen extends StatefulWidget {
   final SignUpData signUpData;
-  final Widget onSuccess;
 
   const OtpScreen({
     super.key,
     required this.signUpData,
-    required this.onSuccess,
   });
 
   @override
@@ -44,7 +42,7 @@ class _OtpScreenState extends State<OtpScreen> {
         authRepository: authRepository,
         signUpData: widget.signUpData,
       ),
-      child: _OtpScreenBody(onSuccess: widget.onSuccess),
+      child: const _OtpScreenBody(),
     );
   }
 }
@@ -52,8 +50,7 @@ class _OtpScreenState extends State<OtpScreen> {
 /// The actual OTP screen UI — runs as a child of [BlocProvider<OtpBloc>]
 /// so it can safely call [OtpBloc.startTimer] via context.
 class _OtpScreenBody extends StatefulWidget {
-  final Widget onSuccess;
-  const _OtpScreenBody({required this.onSuccess});
+  const _OtpScreenBody();
 
   @override
   State<_OtpScreenBody> createState() => _OtpScreenBodyState();
@@ -129,7 +126,6 @@ class _OtpScreenBodyState extends State<_OtpScreenBody> {
             MaterialPageRoute(
               builder: (_) => LoginScreen(
                 authRepository: context.read<AuthRepository>(),
-                onSuccess: widget.onSuccess,
               ),
             ),
             (_) => false, // Clear the navigation stack

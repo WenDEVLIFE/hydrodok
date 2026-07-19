@@ -1,14 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/repositories/auth_repository.dart';
 import '../../core/utils/color_utils.dart';
 import '../../widget/logo_widget.dart';
+import '../login/login_screen.dart';
+import '../main_shell.dart';
+import '../admin/admin_shell.dart';
 
 /// A clean, modern splash screen that displays the brand logo with a subtle
-/// fade + scale animation, then auto-navigates to [nextScreen] after a delay.
+/// fade + scale animation, then checks for an existing Supabase session.
+///
+/// If a valid session is found it routes directly to the correct shell based
+/// on the user's role (farmer/consumer → [MainShell], admin → [AdminShell]).
+/// Otherwise it routes to [LoginScreen] and the role is determined at login.
 class SplashScreen extends StatefulWidget {
-  final Widget nextScreen;
-
-  const SplashScreen({super.key, required this.nextScreen});
+  const SplashScreen({super.key});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -19,6 +26,9 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _controller;
   late final Animation<double> _fadeIn;
   late final Animation<double> _scaleIn;
+
+  // Resolved once the session check completes.
+  Widget? _destination;
 
   @override
   void initState() {
@@ -43,7 +53,26 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
+    // Check for an existing session in parallel with the animation.
+    _checkSession();
+
     Timer(const Duration(milliseconds: 2200), _navigate);
+  }
+
+  Future<void> _checkSession() async {
+    try {
+      final authRepo = context.read<AuthRepository>();
+      final session = await authRepo.getCurrentSession();
+      if (session != null && mounted) {
+        setState(() {
+          _destination = session.role == 'admin'
+              ? const AdminShell()
+              : const MainShell();
+        });
+      }
+    } catch (_) {
+      // No session or network error — fall through to login.
+    }
   }
 
   void _navigate() {
@@ -51,7 +80,9 @@ class _SplashScreenState extends State<SplashScreen>
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            widget.nextScreen,
+            _destination ?? LoginScreen(
+              authRepository: context.read<AuthRepository>(),
+            ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },

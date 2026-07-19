@@ -69,7 +69,12 @@ final class LoginBloc extends Bloc<LoginEvent, LoginState> {
 
     try {
       await _authRepository.signIn(email, password);
-      emit(const LoginSuccess());
+      final session = await _authRepository.getCurrentSession();
+      if (session != null) {
+        emit(LoginSuccess(session));
+      } else {
+        emit(const LoginFailure('Failed to load profile'));
+      }
     } catch (e) {
       emit(LoginFailure(e.toString()));
     }
