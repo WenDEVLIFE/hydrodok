@@ -87,7 +87,7 @@ class _CustomTextFieldState extends State<CustomTextField>
             style: AppTypography.subtitle2(
               color: Theme.of(context).brightness == Brightness.dark
                   ? Colors.white
-                  : ColorUtils.softBlack,
+                  : ColorUtils.textDark,
             ),
           ),
         ),
@@ -135,7 +135,7 @@ class _CustomTextFieldState extends State<CustomTextField>
               style: AppTypography.bodyLarge(
                 color: Theme.of(context).brightness == Brightness.dark
                     ? Colors.white
-                    : ColorUtils.softBlack,
+                    : ColorUtils.textDark,
               ),
               decoration: InputDecoration(
                 hintText: widget.hint,
@@ -143,7 +143,7 @@ class _CustomTextFieldState extends State<CustomTextField>
                   color:
                       (Theme.of(context).brightness == Brightness.dark
                               ? Colors.white
-                              : ColorUtils.softBlack)
+                              : ColorUtils.textDark)
                           .withValues(alpha: 0.4),
                 ),
                 prefixIcon: widget.prefixIcon,

@@ -23,7 +23,7 @@ class PasswordStrengthMeter extends StatelessWidget {
         Text(
           'Password Requirements:',
           style: AppTypography.bodySmall(
-            color: ColorUtils.softBlack.withValues(alpha: 0.6),
+            color: ColorUtils.textDark.withValues(alpha: 0.6),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -68,7 +68,7 @@ class _RequirementItem extends StatelessWidget {
           Text(
             text,
             style: AppTypography.caption(
-              color: isMet ? ColorUtils.softBlack : Colors.grey,
+              color: isMet ? ColorUtils.textDark : Colors.grey,
             ),
           ),
         ],

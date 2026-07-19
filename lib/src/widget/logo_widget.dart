@@ -17,7 +17,7 @@ class LogoWidget extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Image.asset(
-            'assets/logo/logo.jpg',
+            'assets/logo.png',
             height: fontSize * 2.5,
             width: fontSize * 2.5,
             fit: BoxFit.cover,
@@ -25,16 +25,10 @@ class LogoWidget extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Heading1(
-          'Train Radar',
+          'Hydrodok',
           color: color ?? Theme.of(context).colorScheme.onSurface,
         ),
         const SizedBox(height: 8),
-        Heading2(
-          'Real-time train tracking',
-            color:
-              color?.withValues(alpha: 0.7) ??
-              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-        ),
       ],
     );
   }

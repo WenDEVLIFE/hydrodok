@@ -1,116 +1,134 @@
 import 'package:flutter/material.dart';
 
+/// Central color palette for the Hydrodok app.
+///
+/// Nature-inspired palette — dark forest greens, pale sage, earthy terracotta,
+/// and clean off-whites. Designed for an agricultural / food-production feel.
 class ColorUtils {
-  ColorUtils._(); // Private constructor to prevent instantiation
+  ColorUtils._();
 
-  // ── Logo-derived Palette ─────────────────────────────────────────────────
-  /// 🟠 Warm Amber — primary brand accent (muscle highlight from logo)
-  static const Color warmAmber = Color(0xFFE8962A);
+  // ── Core Palette ─────────────────────────────────────────────────────────
 
-  /// 🔵 Slate Blue — secondary brand color (character clothing in logo)
-  static const Color slateBlue = Color(0xFF3D4470);
+  /// 🌲 Dark Forest Green — primary brand color.
+  /// Use for: primary CTAs ("Order"), category tags, active states.
+  static const Color forestGreen = Color(0xFF365D39);
 
-  /// 🌑 Deep Navy — logo background color
-  static const Color deepNavy = Color(0xFF12103A);
+  /// 🌿 Pale Sage Green — secondary brand color.
+  /// Use for: background sections, list-item highlights, header areas.
+  static const Color sageGreen = Color(0xFFC7E5C7);
 
-  /// 🌒 Navy Card — elevated card surface
-  static const Color navyCard = Color(0xFF1E1B4B);
+  /// 🧱 Earthy Terracotta — accent / high-energy CTA.
+  /// Use for: high-priority actions ("Message Farm"), limited-use highlights.
+  static const Color terracotta = Color(0xFFB3652D);
 
-  /// 🟡 Golden Orange — highlight / call-to-action accent
-  static const Color goldenOrange = Color(0xFFFFB347);
+  /// 🫧 Off-White — neutral base.
+  /// Use for: page backgrounds, inactive / disabled states.
+  static const Color offWhite = Color(0xFFF9F9F9);
 
-  /// 🤍 Pure White — text and icon color
+  /// 🤍 Pure White — crisp text / icon tint on dark surfaces.
   static const Color pureWhite = Color(0xFFFFFFFF);
 
-  /// ⬛ Soft Black — deep charcoal for text
-  static const Color softBlack = Color(0xFF2E2E3A);
+  /// 🌑 Deep Charcoal — dark text on light backgrounds.
+  static const Color darkText = Color(0xFF2D3A2D);
 
-  // ============================================
-  // Semantic Color Names
-  // ============================================
+  // ── Dark‑mode Surfaces ──────────────────────────────────────────────────
 
-  /// Primary brand color
-  static const Color primary = warmAmber;
+  /// Dark mode scaffold background — deep forest at night.
+  static const Color darkBackground = Color(0xFF1A2A1A);
 
-  /// Background color
-  static const Color background = deepNavy;
+  /// Dark mode card / elevated surface.
+  static const Color darkCard = Color(0xFF243624);
 
-  /// Accent color
-  static const Color accent = goldenOrange;
+  /// Dark mode surface (slightly lighter than card).
+  static const Color darkSurface = Color(0xFF2E402E);
 
-  /// Secondary brand color
-  static const Color secondary = slateBlue;
+  // ── Light‑mode Surfaces ─────────────────────────────────────────────────
 
-  /// Text color for dark text on light backgrounds
-  static const Color textDark = softBlack;
+  /// Light mode scaffold background.
+  static const Color lightBackground = offWhite;
 
-  /// Light version of amber
-  static final Color primaryLight = warmAmber.withValues(alpha: 0.8);
+  /// Light mode card surface.
+  static const Color lightCard = Color(0xFFFFFFFF);
 
-  /// Darker navy for deep backgrounds
-  static const Color primaryDark = Color(0xFF0A0928);
+  /// Light mode surface tint.
+  static const Color lightSurface = Color(0xFFF0F5F0);
 
-  /// Light version of golden accent
-  static final Color accentLight = goldenOrange.withValues(alpha: 0.3);
+  // ── Semantic Aliases ────────────────────────────────────────────────────
 
-  // ============================================
-  // Gradients
-  // ============================================
+  /// Primary CTA & brand identity.
+  static const Color primary = forestGreen;
 
-  /// Orange → deep navy: core brand gradient
-  static const LinearGradient mainGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [warmAmber, deepNavy],
-  );
+  /// Secondary backgrounds & highlights.
+  static const Color secondary = sageGreen;
 
-  /// Amber → slate blue: button & highlight gradient
-  static const LinearGradient accentGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [goldenOrange, warmAmber],
-  );
+  /// High‑priority accent (use sparingly).
+  static const Color accent = terracotta;
 
-  // ============================================
-  // Color Schemes
-  // ============================================
+  /// Page / scaffold background.
+  static const Color background = offWhite;
 
-  /// Dark color scheme for the app (primary mode)
+  /// Dark text on light surfaces.
+  static const Color textDark = darkText;
+
+  // ── Light Variants ──────────────────────────────────────────────────────
+
+  /// 80 % primary — useful for pressed / hover states.
+  static Color get primaryLight => primary.withValues(alpha: 0.8);
+
+  /// 30 % accent — subtle glow / shadow tint.
+  static Color get accentLight => accent.withValues(alpha: 0.3);
+
+  // ── Gradients ────────────────────────────────────────────────────────────
+
+  /// Forest → dark forest: primary brand gradient.
+  static LinearGradient get mainGradient => const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [forestGreen, darkBackground],
+      );
+
+  /// Terracotta → forest green: energetic CTA gradient.
+  static LinearGradient get accentGradient => const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [terracotta, forestGreen],
+      );
+
+  // ── Color Schemes ────────────────────────────────────────────────────────
+
+  /// Dark color scheme — forest greens with off‑white text.
   static ColorScheme get darkColorScheme => const ColorScheme.dark(
-    primary: warmAmber,
-    secondary: slateBlue,
-    tertiary: goldenOrange,
-    surface: navyCard,
-    onPrimary: pureWhite,
-    onSecondary: pureWhite,
-    onSurface: pureWhite,
-    error: Color(0xFFCF6679),
-  );
+        primary: forestGreen,
+        secondary: sageGreen,
+        tertiary: terracotta,
+        surface: darkSurface,
+        onPrimary: pureWhite,
+        onSecondary: darkText,
+        onSurface: pureWhite,
+        error: Color(0xFFCF6679),
+      );
 
-  /// Light color scheme for the app (fallback)
-  static ColorScheme get lightColorScheme => ColorScheme.light(
-    primary: warmAmber,
-    secondary: slateBlue,
-    tertiary: goldenOrange,
-    surface: pureWhite,
-    onPrimary: Colors.white,
-    onSecondary: Colors.white,
-    onSurface: softBlack,
-    error: Colors.redAccent,
-  );
+  /// Light color scheme — clean off‑white with forest‑green accents.
+  static ColorScheme get lightColorScheme => const ColorScheme.light(
+        primary: forestGreen,
+        secondary: sageGreen,
+        tertiary: terracotta,
+        surface: lightSurface,
+        onPrimary: pureWhite,
+        onSecondary: darkText,
+        onSurface: darkText,
+        error: Color(0xFFB00020),
+      );
 
-  // ============================================
-  // Helper methods
-  // ============================================
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
-  /// Get a color with custom alpha/opacity
+  /// Shortcut for `color.withValues(alpha:)`.
   static Color withValues(Color color, double opacity) {
     return color.withValues(alpha: opacity);
   }
 
-  /// Blend two colors together
+  /// Linear interpolation between two colours.
   static Color blend(Color color1, Color color2, double ratio) {
     return Color.lerp(color1, color2, ratio) ?? color1;
   }
 }
-
