@@ -78,10 +78,12 @@ Stores user information.
 Fields
 
 - id
-- role
+- role (farmer | consumer | admin)
 - full_name
 - phone
 - avatar_url
+- contact_number (added by migration — alias for phone)
+- onboarding_completed (added by migration — defaults to false)
 - created_at
 
 ---
@@ -99,6 +101,29 @@ Fields
 - address
 - latitude
 - longitude
+- contact_number
+- produce_types (added by migration — text[], e.g. {"Lettuce","Tomatoes"})
+- verification_status (added by migration — unverified | pending | verified | rejected)
+- verification_doc_url (added by migration)
+- status (active | inactive)
+- created_at
+- updated_at
+
+---
+
+## delivery_addresses
+
+Consumer delivery addresses. Created during post-registration onboarding.
+
+Fields
+
+- id
+- profile_id
+- label (default: "Home")
+- address
+- latitude
+- longitude
+- is_default
 - created_at
 
 ---
@@ -304,6 +329,7 @@ Fields
 profiles
     │
     ├── farms
+    ├── delivery_addresses
     ├── tasks
     ├── products
     ├── issue_reports
@@ -449,6 +475,8 @@ Recommended indexes:
 
 - profiles(role)
 - farms(owner_id)
+- farms(verification_status)
+- delivery_addresses(profile_id)
 - tasks(farmer_id)
 - tasks(status)
 - issue_reports(status)
