@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../widget/bottom_nav_bar.dart';
 import 'map/map_screen.dart';
 import 'pest_id/pest_id_screen.dart';
+import 'pooling/pooling_screen.dart';
 import 'profile/profile_screen.dart';
 
 /// Root shell that hosts the bottom nav and switches between feature screens.
@@ -22,7 +23,7 @@ class _MainShellState extends State<MainShell> {
     MapScreen(),
     _Placeholder(label: 'Forum'),
     PestIdScreen(),
-    _Placeholder(label: 'Pooling'),
+    PoolingScreen(),
     ProfileScreen(),
   ];
 
