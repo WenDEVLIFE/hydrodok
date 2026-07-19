@@ -8,6 +8,7 @@ import '../../core/utils/typography.dart';
 import '../../widget/custom_button.dart';
 import '../../widget/custom_text_field.dart';
 import '../../widget/logo_widget.dart';
+import '../register/register_screen.dart';
 
 /// Full‑screen login form with email / password fields, client‑side
 /// validation, and a loading / error lifecycle driven by [LoginBloc].
@@ -156,7 +157,37 @@ class _LoginScreenState extends State<LoginScreen> {
                           isLoading: isLoading,
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
+
+                      // ── Link to Register ───────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            "Don't have an account? ",
+                            style: AppTypography.bodyMedium(
+                              color: ColorUtils.pureWhite.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => RegisterScreen(
+                                  onSuccess: widget.onSuccess,
+                                ),
+                              ),
+                            ),
+                            child: Text(
+                              'Sign up',
+                              style: AppTypography.bodyMedium(
+                                color: ColorUtils.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                     ],
                   ),
                 ),
