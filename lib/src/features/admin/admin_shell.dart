@@ -5,6 +5,7 @@ import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import 'accounts/account_moderation_screen.dart';
 import 'banner_manager/banner_manager_screen.dart';
+import 'forum_moderation/forum_moderation_screen.dart';
 import 'issue_reports/issue_reports_screen.dart';
 import 'marketplace/marketplace_management_screen.dart';
 
@@ -48,6 +49,8 @@ class _AdminShellState extends State<AdminShell> {
         return const AccountModerationScreen();
       case 3:
         return const MarketplaceManagementScreen();
+      case 4:
+        return const ForumModerationScreen();
       default:
         return Center(
           child: Text(
