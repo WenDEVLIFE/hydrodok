@@ -9,6 +9,7 @@ import '../../core/utils/typography.dart';
 import '../../widget/custom_button.dart';
 import '../../widget/custom_text_field.dart';
 import '../../widget/logo_widget.dart';
+import '../admin/admin_shell.dart';
 import '../register/register_screen.dart';
 
 /// Full‑screen login form with email / password fields, client‑side
@@ -213,6 +214,32 @@ class _LoginScreenState extends State<LoginScreen> {
                             'Test: Skip to App →',
                             style: AppTypography.button(
                               color: ColorUtils.pureWhite.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // ── DEV: Skip to Admin ───────────────────────────
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(builder: (_) => const AdminShell()),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: ColorUtils.terracotta.withValues(alpha: 0.5),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Text(
+                            'Test: Admin Panel →',
+                            style: AppTypography.button(
+                              color: ColorUtils.terracotta.withValues(alpha: 0.9),
                             ),
                           ),
                         ),

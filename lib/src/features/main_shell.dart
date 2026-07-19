@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'user/forum/forum_screen.dart';
+import 'user/map/map_screen.dart';
+import 'user/pest_id/pest_id_screen.dart';
+import 'user/pooling/pooling_screen.dart';
+import 'user/profile/profile_screen.dart';
 
 import '../widget/bottom_nav_bar.dart';
-import 'map/map_screen.dart';
-import 'pest_id/pest_id_screen.dart';
-import 'pooling/pooling_screen.dart';
-import 'profile/profile_screen.dart';
+
 
 /// Root shell that hosts the bottom nav and switches between feature screens.
 class MainShell extends StatefulWidget {
@@ -21,7 +23,7 @@ class _MainShellState extends State<MainShell> {
   //  0 → Map, 1 → Forum, 2 → Pest ID, 3 → Pooling, 4 → Profile
   final List<Widget> _screens = const [
     MapScreen(),
-    _Placeholder(label: 'Forum'),
+    ForumScreen(),
     PestIdScreen(),
     PoolingScreen(),
     ProfileScreen(),
@@ -39,22 +41,6 @@ class _MainShellState extends State<MainShell> {
         onIndexChanged: (index) => setState(() => _currentIndex = index),
       ),
       extendBody: true,
-    );
-  }
-}
-
-/// Temporary placeholder for screens not yet built.
-class _Placeholder extends StatelessWidget {
-  final String label;
-  const _Placeholder({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.headlineMedium,
-      ),
     );
   }
 }
