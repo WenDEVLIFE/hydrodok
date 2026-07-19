@@ -2,11 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_sliding_toast/flutter_sliding_toast.dart';
+import '../../core/repositories/auth_repository.dart';
 import '../../bloc/otp/otp_bloc.dart';
 import '../../bloc/otp/otp_event.dart';
 import '../../bloc/otp/otp_state.dart';
 import '../../core/models/auth_models.dart';
-import '../../core/repositories/auth_repository.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import '../../widget/custom_button.dart';
@@ -105,13 +105,19 @@ class _OtpScreenBodyState extends State<_OtpScreenBody> {
     return BlocConsumer<OtpBloc, OtpState>(
       listener: (context, state) {
         if (state is OtpSuccess && mounted) {
-          InteractiveToast.slideSuccess(
+          InteractiveToast.slide(
             context: context,
+            leading: const Icon(
+              Icons.check_circle,
+              color: Colors.white,
+              size: 28,
+            ),
             title: const Text(
               'Account created successfully! You can now sign in.',
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: 14,
+                color: Colors.white,
               ),
             ),
             toastStyle: const ToastStyle(
@@ -121,7 +127,10 @@ class _OtpScreenBodyState extends State<_OtpScreenBody> {
           );
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(
-              builder: (_) => LoginScreen(onSuccess: widget.onSuccess),
+              builder: (_) => LoginScreen(
+                authRepository: context.read<AuthRepository>(),
+                onSuccess: widget.onSuccess,
+              ),
             ),
             (_) => false, // Clear the navigation stack
           );

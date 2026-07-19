@@ -87,7 +87,10 @@ class _AfterSplash extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const LoginScreen(onSuccess: _HomePlaceholder());
+    return LoginScreen(
+      authRepository: context.read<AuthRepository>(),
+      onSuccess: const _HomePlaceholder(),
+    );
   }
 }
 

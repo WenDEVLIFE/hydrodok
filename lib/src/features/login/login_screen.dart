@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/login/login_bloc.dart';
 import '../../bloc/login/login_event.dart';
 import '../../bloc/login/login_state.dart';
+import '../../core/repositories/auth_repository.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import '../../widget/custom_button.dart';
@@ -19,7 +20,14 @@ class LoginScreen extends StatefulWidget {
   /// Widget to navigate to after a successful login.
   final Widget onSuccess;
 
-  const LoginScreen({super.key, required this.onSuccess});
+  /// Provided by the parent to avoid context.read lookup inside BlocProvider.
+  final AuthRepository authRepository;
+
+  const LoginScreen({
+    super.key,
+    required this.onSuccess,
+    required this.authRepository,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -40,7 +48,9 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => LoginBloc(),
+      create: (_) => LoginBloc(
+        authRepository: widget.authRepository,
+      ),
       child: BlocConsumer<LoginBloc, LoginState>(
         listener: (context, state) {
           if (state is LoginSuccess && mounted) {

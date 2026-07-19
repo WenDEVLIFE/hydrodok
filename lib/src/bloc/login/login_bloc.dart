@@ -1,16 +1,17 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/repositories/auth_repository.dart';
 import 'login_event.dart';
 import 'login_state.dart';
 
 /// Manages the login form: validates input, handles submission, and emits
 /// loading / success / failure states.
-///
-/// Currently simulates an auth call so the UI can be developed in isolation.
-/// When Supabase auth is ready, inject an authentication use‑case / repository
-/// into this bloc and replace the `Future.delayed` with a real call.
 final class LoginBloc extends Bloc<LoginEvent, LoginState> {
-  LoginBloc() : super(const LoginInitial()) {
+  final AuthRepository _authRepository;
+
+  LoginBloc({required AuthRepository authRepository})
+      : _authRepository = authRepository,
+        super(const LoginInitial()) {
     on<LoginEmailChanged>(_onEmailChanged);
     on<LoginPasswordChanged>(_onPasswordChanged);
     on<LoginSubmitted>(_onSubmitted);
@@ -67,10 +68,7 @@ final class LoginBloc extends Bloc<LoginEvent, LoginState> {
     emit(const LoginLoading());
 
     try {
-      // TODO: Replace with Supabase auth call
-      //   await _authRepository.signIn(email: email, password: password);
-      await Future<void>.delayed(const Duration(seconds: 1));
-
+      await _authRepository.signIn(email, password);
       emit(const LoginSuccess());
     } catch (e) {
       emit(LoginFailure(e.toString()));

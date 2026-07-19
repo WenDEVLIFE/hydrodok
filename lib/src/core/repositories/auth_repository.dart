@@ -34,6 +34,10 @@ abstract class AuthRepository {
   /// Creates the auth user, profile, and farm (if farmer).
   /// Throws on failure.
   Future<void> signUp(SignUpData data);
+
+  /// Authenticates an existing user with [email] and [password].
+  /// Throws on failure (wrong credentials, network error, etc.).
+  Future<void> signIn(String email, String password);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,6 +183,19 @@ class SupabaseAuthRepository implements AuthRepository {
         'p_address': data.farm!.location,
         'p_produce_types': [data.farm!.produceType],
       });
+    }
+  }
+
+  // ── Sign in ─────────────────────────────────────────────────────────
+
+  @override
+  Future<void> signIn(String email, String password) async {
+    final response = await _supabase.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+    if (response.user == null) {
+      throw Exception('Invalid email or password');
     }
   }
 
