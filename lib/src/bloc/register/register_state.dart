@@ -1,5 +1,4 @@
-/// The two user roles supported by the app.
-enum UserRole { farmer, consumer }
+import '../../core/models/auth_models.dart';
 
 /// Possible states of the registration form lifecycle.
 sealed class RegisterState {
@@ -16,9 +15,10 @@ final class RegisterLoading extends RegisterState {
   const RegisterLoading();
 }
 
-/// Registration succeeded — navigate to the appropriate screen.
-final class RegisterSuccess extends RegisterState {
-  const RegisterSuccess();
+/// OTP sent — navigate to the OTP verification screen with the collected data.
+final class RegisterOtpSent extends RegisterState {
+  final SignUpData data;
+  const RegisterOtpSent(this.data);
 }
 
 /// Registration failed — show an error message.

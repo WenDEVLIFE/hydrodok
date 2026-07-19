@@ -18,3 +18,8 @@ final class OtpVerifySubmitted extends OtpEvent {
 final class OtpResendRequested extends OtpEvent {
   const OtpResendRequested();
 }
+
+/// Emitted periodically (every second) to drive the expiry countdown.
+final class OtpTimerTicked extends OtpEvent {
+  const OtpTimerTicked();
+}

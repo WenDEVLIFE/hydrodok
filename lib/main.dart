@@ -1,14 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'src/core/repositories/auth_repository.dart';
+import 'src/core/service/email_service.dart';
 import 'src/core/utils/color_utils.dart';
 import 'src/core/utils/typography.dart';
 import 'src/features/login/login_screen.dart';
 import 'src/features/splash_screen/splash_screen.dart';
 
 void main() async {
-  initializeSupabase();
-  runApp(const HydrodokApp());
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final prefs = await SharedPreferences.getInstance();
+  await initializeSupabase();
+
+  final authRepository = SupabaseAuthRepository(
+    supabase: Supabase.instance.client,
+    emailService: EmailService(),
+    prefs: prefs,
+  );
+
+  runApp(
+    RepositoryProvider<AuthRepository>.value(
+      value: authRepository,
+      child: const HydrodokApp(),
+    ),
+  );
 }
 
 Future<bool> initializeSupabase() async {
@@ -40,7 +59,7 @@ class HydrodokApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Train Radar',
+      title: 'Hydrodok',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -54,7 +73,7 @@ class HydrodokApp extends StatelessWidget {
 }
 
 /// What the user sees after the splash animation finishes.
-/// Currently routes to login; on success, goes to the home placeholder.
+/// Routes to login; on success, goes to the home placeholder.
 class _AfterSplash extends StatelessWidget {
   const _AfterSplash();
 
@@ -65,7 +84,6 @@ class _AfterSplash extends StatelessWidget {
 }
 
 /// Temporary home while the app is in early development.
-/// Replace this with your actual home screen when ready.
 class _HomePlaceholder extends StatelessWidget {
   const _HomePlaceholder();
 
@@ -73,7 +91,7 @@ class _HomePlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Train Radar'),
+        title: const Text('Hydrodok'),
         centerTitle: true,
       ),
       body: Center(
@@ -89,7 +107,7 @@ class _HomePlaceholder extends StatelessWidget {
               ),
               const SizedBox(height: 24),
               Text(
-                'Real-time train tracking',
+                'Your hydroponic farm manager',
                 style: AppTypography.heading3(
                   color: ColorUtils.pureWhite,
                 ),

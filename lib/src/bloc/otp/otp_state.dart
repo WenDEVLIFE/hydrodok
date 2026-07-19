@@ -5,7 +5,8 @@ sealed class OtpState {
 
 /// Awaiting user input.
 final class OtpInitial extends OtpState {
-  const OtpInitial();
+  final int remainingSeconds;
+  const OtpInitial({this.remainingSeconds = 600});
 }
 
 /// Verifying the submitted code.
@@ -27,4 +28,9 @@ final class OtpFailure extends OtpState {
 /// A resend request is in progress.
 final class OtpResending extends OtpState {
   const OtpResending();
+}
+
+/// The OTP has expired — show a message and prompt to resend or go back.
+final class OtpExpired extends OtpState {
+  const OtpExpired();
 }

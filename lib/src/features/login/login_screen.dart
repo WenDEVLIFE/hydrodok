@@ -48,13 +48,28 @@ class _LoginScreenState extends State<LoginScreen> {
               MaterialPageRoute(builder: (_) => widget.onSuccess),
             );
           }
+          if (state is LoginFailure && mounted) {
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: ColorUtils.darkBackground,
+                title: const Text('Login Failed',
+                    style: TextStyle(color: Colors.white)),
+                content: Text(state.error,
+                    style: const TextStyle(color: Colors.white70)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: Text('OK',
+                        style: TextStyle(color: ColorUtils.primary)),
+                  ),
+                ],
+              ),
+            );
+          }
         },
         builder: (context, state) {
           final isLoading = state is LoginLoading;
-          final errorText = switch (state) {
-            LoginFailure(error: final e) => e,
-            _ => null,
-          };
 
           return Scaffold(
             backgroundColor: ColorUtils.darkBackground,
@@ -122,27 +137,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             .add(LoginPasswordChanged(value)),
                       ),
                       const SizedBox(height: 12),
-
-                      // ── Error ───────────────────────────────────────
-                      if (errorText != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: [
-                              Icon(Icons.error_outline,
-                                  size: 18, color: Colors.redAccent),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  errorText,
-                                  style: AppTypography.caption(
-                                    color: Colors.redAccent,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
 
                       // ── Submit ──────────────────────────────────────
                       SizedBox(

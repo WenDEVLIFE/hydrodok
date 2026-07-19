@@ -1,23 +1,30 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_sliding_toast/flutter_sliding_toast.dart';
 import '../../bloc/otp/otp_bloc.dart';
 import '../../bloc/otp/otp_event.dart';
 import '../../bloc/otp/otp_state.dart';
+import '../../core/models/auth_models.dart';
+import '../../core/repositories/auth_repository.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import '../../widget/custom_button.dart';
+import '../login/login_screen.dart';
 
 /// Full‑screen OTP verification with a 6‑digit code input.
 ///
-/// On success it navigates to [onSuccess] — typically the home screen.
+/// On [OtpSuccess] it navigates to [LoginScreen] with [onSuccess] so the
+/// login screen knows where to go after the user signs in.
+/// The account is created (via [AuthRepository.signUp]) only after
+/// successful OTP verification (handled inside [OtpBloc]).
 class OtpScreen extends StatefulWidget {
-  final String email;
+  final SignUpData signUpData;
   final Widget onSuccess;
 
   const OtpScreen({
     super.key,
-    required this.email,
+    required this.signUpData,
     required this.onSuccess,
   });
 
@@ -25,7 +32,34 @@ class OtpScreen extends StatefulWidget {
   State<OtpScreen> createState() => _OtpScreenState();
 }
 
+/// Thin wrapper that creates [BlocProvider<OtpBloc>] and delegates to
+/// [_OtpScreenBody] so the bloc is available in the body's context.
 class _OtpScreenState extends State<OtpScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final authRepository = context.read<AuthRepository>();
+
+    return BlocProvider(
+      create: (_) => OtpBloc(
+        authRepository: authRepository,
+        signUpData: widget.signUpData,
+      ),
+      child: _OtpScreenBody(onSuccess: widget.onSuccess),
+    );
+  }
+}
+
+/// The actual OTP screen UI — runs as a child of [BlocProvider<OtpBloc>]
+/// so it can safely call [OtpBloc.startTimer] via context.
+class _OtpScreenBody extends StatefulWidget {
+  final Widget onSuccess;
+  const _OtpScreenBody({required this.onSuccess});
+
+  @override
+  State<_OtpScreenBody> createState() => _OtpScreenBodyState();
+}
+
+class _OtpScreenBodyState extends State<_OtpScreenBody> {
   final _codeController = TextEditingController();
   final _focusNode = FocusNode();
   final _resendNotifier = ValueNotifier<int>(30);
@@ -36,9 +70,12 @@ class _OtpScreenState extends State<OtpScreen> {
   void initState() {
     super.initState();
     _startResendTimer();
-    // Auto‑focus the hidden field so the keyboard appears immediately.
+
+    // Auto‑focus the hidden field so the keyboard appears immediately,
+    // and start the OTP expiry countdown.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
+      if (mounted) context.read<OtpBloc>().startTimer();
     });
   }
 
@@ -65,85 +102,178 @@ class _OtpScreenState extends State<OtpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => OtpBloc(),
-      child: BlocConsumer<OtpBloc, OtpState>(
-        listener: (context, state) {
-          if (state is OtpSuccess && mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => widget.onSuccess),
-            );
-          }
-        },
-        builder: (context, state) {
-          final isLoading = state is OtpLoading;
-          final isResending = state is OtpResending;
-          final errorText = switch (state) {
-            OtpFailure(error: final e) => e,
-            _ => null,
-          };
-
-          return Scaffold(
-            backgroundColor: ColorUtils.darkBackground,
-            appBar: AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
+    return BlocConsumer<OtpBloc, OtpState>(
+      listener: (context, state) {
+        if (state is OtpSuccess && mounted) {
+          InteractiveToast.slideSuccess(
+            context: context,
+            title: const Text(
+              'Account created successfully! You can now sign in.',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
               ),
             ),
-            body: SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // ── Icon ─────────────────────────────────────────
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: ColorUtils.primary.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.mail_outline,
-                          size: 40,
-                          color: ColorUtils.primary,
-                        ),
-                      ),
-                      const SizedBox(height: 28),
+            toastStyle: const ToastStyle(
+              backgroundColor: Color(0xFF1B5E20),
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+            ),
+          );
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (_) => LoginScreen(onSuccess: widget.onSuccess),
+            ),
+            (_) => false, // Clear the navigation stack
+          );
+        }
+        if (state is OtpFailure && mounted) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: ColorUtils.darkBackground,
+              title: const Text('Verification Failed',
+                  style: TextStyle(color: Colors.white)),
+              content: Text(state.error,
+                  style: const TextStyle(color: Colors.white70)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text('OK',
+                      style: TextStyle(color: ColorUtils.primary)),
+                ),
+              ],
+            ),
+          );
+        }
+      },
+      builder: (context, state) {
+        final isLoading = state is OtpLoading;
+        final isResending = state is OtpResending;
+        final isExpired = state is OtpExpired;
 
-                      // ── Heading ──────────────────────────────────────
+        // Access email from the bloc's signUpData
+        String email;
+        try {
+          // In tests the bloc may not be available
+          email = context.read<OtpBloc>().signUpDataEmail;
+        } catch (_) {
+          email = '';
+        }
+
+        final remaining = state is OtpInitial ? state.remainingSeconds : 0;
+
+        return Scaffold(
+          backgroundColor: ColorUtils.darkBackground,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          body: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── Icon ─────────────────────────────────────────
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: ColorUtils.primary.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.mail_outline,
+                        size: 40,
+                        color: ColorUtils.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // ── Heading ──────────────────────────────────────
+                    Text(
+                      'Verify Email',
+                      style: AppTypography.heading3(
+                        color: ColorUtils.pureWhite,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Enter the 6-digit code sent to',
+                      style: AppTypography.bodyMedium(
+                        color: ColorUtils.pureWhite.withValues(alpha: 0.6),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      email,
+                      style: AppTypography.bodyMedium(
+                        color: ColorUtils.pureWhite,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── Global countdown ─────────────────────────────
+                    if (!isExpired)
                       Text(
-                        'Verify Email',
-                        style: AppTypography.heading3(
-                          color: ColorUtils.pureWhite,
+                        _formatCountdown(remaining),
+                        style: AppTypography.caption(
+                          color: remaining < 120
+                              ? Colors.orangeAccent
+                              : ColorUtils.sageGreen,
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 10),
+
+                    const SizedBox(height: 24),
+
+                    // ── Expired state ────────────────────────────────
+                    if (isExpired) ...[
+                      Icon(
+                        Icons.timer_off_outlined,
+                        size: 48,
+                        color: Colors.orangeAccent,
+                      ),
+                      const SizedBox(height: 16),
                       Text(
-                        'Enter the 6-digit code sent to',
+                        'Verification code expired',
+                        style: AppTypography.heading3(
+                          color: Colors.orangeAccent,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Request a new code to continue.',
                         style: AppTypography.bodyMedium(
                           color: ColorUtils.pureWhite.withValues(alpha: 0.6),
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        widget.email,
-                        style: AppTypography.bodyMedium(
-                          color: ColorUtils.pureWhite,
-                          fontWeight: FontWeight.w600,
+                      const SizedBox(height: 28),
+                      SizedBox(
+                        width: double.infinity,
+                        child: CustomButton(
+                          label: 'Resend Code',
+                          onPressed: () {
+                            _startResendTimer();
+                            context
+                                .read<OtpBloc>()
+                                .add(const OtpResendRequested());
+                          },
                         ),
-                        textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 36),
-
-                      // ── OTP input ────────────────────────────────────
+                    ] else ...[
+                      // ── OTP input ──────────────────────────────────
                       _OtpInput(
                         controller: _codeController,
                         focusNode: _focusNode,
@@ -153,27 +283,7 @@ class _OtpScreenState extends State<OtpScreen> {
                       ),
                       const SizedBox(height: 28),
 
-                      // ── Error ────────────────────────────────────────
-                      if (errorText != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.error_outline,
-                                  size: 16, color: Colors.redAccent),
-                              const SizedBox(width: 6),
-                              Text(
-                                errorText,
-                                style: AppTypography.caption(
-                                  color: Colors.redAccent,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                      // ── Verify button ────────────────────────────────
+                      // ── Verify button ──────────────────────────────
                       SizedBox(
                         width: double.infinity,
                         child: CustomButton(
@@ -188,7 +298,7 @@ class _OtpScreenState extends State<OtpScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // ── Resend ───────────────────────────────────────
+                      // ── Resend ─────────────────────────────────────
                       _ResendRow(
                         notifier: _resendNotifier,
                         isResending: isResending,
@@ -199,16 +309,22 @@ class _OtpScreenState extends State<OtpScreen> {
                               .add(const OtpResendRequested());
                         },
                       ),
-                      const SizedBox(height: 16),
                     ],
-                  ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
               ),
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
+  }
+
+  String _formatCountdown(int seconds) {
+    final min = seconds ~/ 60;
+    final sec = seconds % 60;
+    return 'Code expires in ${min}:${sec.toString().padLeft(2, '0')}';
   }
 }
 
@@ -262,39 +378,48 @@ class _OtpBoxes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(6, (i) {
-        final hasDigit = i < code.length;
-        final isFocused = i == code.length;
-        return Container(
-          width: 48,
-          height: 56,
-          margin: const EdgeInsets.symmetric(horizontal: 5),
-          decoration: BoxDecoration(
-            color: hasDigit
-                ? ColorUtils.primary.withValues(alpha: 0.15)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isFocused
-                  ? ColorUtils.primary
-                  : hasDigit
-                      ? ColorUtils.primary.withValues(alpha: 0.5)
-                      : ColorUtils.pureWhite.withValues(alpha: 0.2),
-              width: isFocused ? 2 : 1.5,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              hasDigit ? code[i] : '',
-              style: AppTypography.heading3(
-                color: ColorUtils.pureWhite,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final spacing = 6.0;
+        final totalSpacing = spacing * 5;
+        final boxSize =
+            ((constraints.maxWidth - totalSpacing) / 6).clamp(36.0, 52.0);
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(6, (i) {
+            final hasDigit = i < code.length;
+            final isFocused = i == code.length;
+            return Container(
+              width: boxSize,
+              height: boxSize + 8,
+              margin: EdgeInsets.only(left: i > 0 ? spacing : 0),
+              decoration: BoxDecoration(
+                color: hasDigit
+                    ? ColorUtils.primary.withValues(alpha: 0.15)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isFocused
+                      ? ColorUtils.primary
+                      : hasDigit
+                          ? ColorUtils.primary.withValues(alpha: 0.5)
+                          : ColorUtils.pureWhite.withValues(alpha: 0.2),
+                  width: isFocused ? 2 : 1.5,
+                ),
               ),
-            ),
-          ),
+              child: Center(
+                child: Text(
+                  hasDigit ? code[i] : '',
+                  style: AppTypography.heading3(
+                    color: ColorUtils.pureWhite,
+                  ),
+                ),
+              ),
+            );
+          }),
         );
-      }),
+      },
     );
   }
 }

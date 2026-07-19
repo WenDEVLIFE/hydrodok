@@ -1,18 +1,22 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../core/models/auth_models.dart';
+import '../../core/repositories/auth_repository.dart';
 import 'register_event.dart';
 import 'register_state.dart';
 
 /// Manages the registration form: validates all fields, handles role selection,
-/// and emits loading / success / failure states.
+/// checks uniqueness, sends OTP, and emits [RegisterOtpSent] with the
+/// collected [SignUpData] so the UI can navigate to the OTP screen.
 ///
-/// Farmer registrants must also supply farm name, location, and produce type.
-///
-/// Currently simulates the sign‑up call so the UI can be developed in
-/// isolation. When Supabase auth is ready, inject an authentication
-/// use‑case / repository and replace the `Future.delayed`.
+/// The actual account creation ([AuthRepository.signUp]) happens only after
+/// OTP verification (in [OtpBloc]), not here.
 final class RegisterBloc extends Bloc<RegisterEvent, RegisterState> {
-  RegisterBloc() : super(const RegisterInitial()) {
+  final AuthRepository _authRepository;
+
+  RegisterBloc({required AuthRepository authRepository})
+      : _authRepository = authRepository,
+        super(const RegisterInitial()) {
     on<RegisterNameChanged>(_onNameChanged);
     on<RegisterEmailChanged>(_onEmailChanged);
     on<RegisterContactNumberChanged>(_onContactNumberChanged);
@@ -140,32 +144,48 @@ final class RegisterBloc extends Bloc<RegisterEvent, RegisterState> {
         return emit(const RegisterFailure('Please enter your farm location'));
       }
       if (_produceType.trim().isEmpty) {
-        return emit(const RegisterFailure('Please enter your primary produce type'));
+        return emit(
+            const RegisterFailure('Please enter your primary produce type'));
       }
     }
 
-    // ── Submission ──────────────────────────────────────────────────
+    // ── Uniqueness checks ──────────────────────────────────────────
     emit(const RegisterLoading());
 
     try {
-      // TODO: Replace with Supabase auth call
-      //   await _authRepository.signUp(
-      //     name: name,
-      //     email: email,
-      //     contactNumber: contactNumber,
-      //     password: password,
-      //     role: _role,
-      //     farmName: _farmName,        // Farmer only — empty for Consumer
-      //     farmLocation: _farmLocation,
-      //     produceType: _produceType,
-      //   );
-      print('Registering as ${_role.name}');
-      if (_role == UserRole.farmer) {
-        print('  Farm: $_farmName / $_farmLocation / $_produceType');
+      final emailExists = await _authRepository.checkEmailExists(email);
+      if (emailExists) {
+        return emit(const RegisterFailure(
+            'An account with this email already exists'));
       }
-      await Future<void>.delayed(const Duration(seconds: 1));
 
-      emit(const RegisterSuccess());
+      final nameExists = await _authRepository.checkNameExists(name);
+      if (nameExists) {
+        return emit(
+            const RegisterFailure('This full name is already registered'));
+      }
+
+      // ── Build sign-up data & send OTP ──────────────────────────────
+      final farm = _role == UserRole.farmer
+          ? FarmDetails(
+              farmName: _farmName.trim(),
+              location: _farmLocation.trim(),
+              produceType: _produceType.trim(),
+            )
+          : null;
+
+      final data = SignUpData(
+        name: name,
+        email: email,
+        contactNumber: contactNumber,
+        password: password,
+        role: _role,
+        farm: farm,
+      );
+
+      await _authRepository.generateAndSendOtp(email);
+
+      emit(RegisterOtpSent(data));
     } catch (e) {
       emit(RegisterFailure(e.toString()));
     }

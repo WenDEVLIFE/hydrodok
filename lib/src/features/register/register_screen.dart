@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/register/register_bloc.dart';
 import '../../bloc/register/register_event.dart';
 import '../../bloc/register/register_state.dart';
+import '../../core/models/auth_models.dart';
+import '../../core/repositories/auth_repository.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import '../../widget/custom_button.dart';
@@ -13,18 +15,34 @@ import '../otp/otp_screen.dart';
 /// Full‑screen registration form with shared fields, role toggle, and
 /// conditional farmer‑specific fields (farm name, location, produce type).
 ///
-/// On success it navigates to [OtpScreen] for email verification, then
-/// finally to [onSuccess].
-class RegisterScreen extends StatefulWidget {
+/// On [RegisterOtpSent] it navigates to [OtpScreen] for email verification,
+/// then finally to [LoginScreen].
+class RegisterScreen extends StatelessWidget {
+  /// Widget to navigate to after the final login (passed through OTP → Login).
   final Widget onSuccess;
 
   const RegisterScreen({super.key, required this.onSuccess});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  Widget build(BuildContext context) {
+    final authRepository = context.read<AuthRepository>();
+
+    return BlocProvider(
+      create: (_) => RegisterBloc(authRepository: authRepository),
+      child: _RegisterForm(onSuccess: onSuccess),
+    );
+  }
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterForm extends StatefulWidget {
+  final Widget onSuccess;
+  const _RegisterForm({required this.onSuccess});
+
+  @override
+  State<_RegisterForm> createState() => _RegisterFormState();
+}
+
+class _RegisterFormState extends State<_RegisterForm> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _contactController = TextEditingController();
@@ -53,240 +71,231 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => RegisterBloc(),
-      child: BlocConsumer<RegisterBloc, RegisterState>(
-        listener: (context, state) {
-          if (state is RegisterSuccess && mounted) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => OtpScreen(
-                  email: _emailController.text.trim(),
-                  onSuccess: widget.onSuccess,
-                ),
-              ),
-            );
-          }
-        },
-        builder: (context, state) {
-          final isLoading = state is RegisterLoading;
-          final errorText = switch (state) {
-            RegisterFailure(error: final e) => e,
-            _ => null,
-          };
-
-          return Scaffold(
-            backgroundColor: ColorUtils.darkBackground,
-            body: SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(height: 16),
-                      const LogoWidget(),
-                      const SizedBox(height: 24),
-
-                      // ── Heading ─────────────────────────────────────
-                      Text(
-                        'Create Account',
-                        style: AppTypography.heading3(
-                          color: ColorUtils.pureWhite,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Join as a Farmer or Consumer',
-                        style: AppTypography.bodyMedium(
-                          color: ColorUtils.pureWhite.withValues(alpha: 0.6),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 32),
-
-                      // ── Role selector ───────────────────────────────
-                      _RoleSelector(
-                        initial: _selectedRole,
-                        onChanged: (role) {
-                          setState(() => _selectedRole = role);
-                          context
-                              .read<RegisterBloc>()
-                              .add(RegisterRoleChanged(role));
-                        },
-                      ),
-                      const SizedBox(height: 28),
-
-                      // ═══════════════════════════════════════════════
-                      //  SHARED FIELDS
-                      // ═══════════════════════════════════════════════
-
-                      CustomTextField(
-                        label: 'Full Name',
-                        hint: 'Juan Dela Cruz',
-                        controller: _nameController,
-                        prefixIcon: const Icon(Icons.person_outline),
-                        onChanged: (value) => context
-                            .read<RegisterBloc>()
-                            .add(RegisterNameChanged(value)),
-                      ),
-                      const SizedBox(height: 16),
-
-                      CustomTextField(
-                        label: 'Email',
-                        hint: 'you@example.com',
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        prefixIcon: const Icon(Icons.email_outlined),
-                        onChanged: (value) => context
-                            .read<RegisterBloc>()
-                            .add(RegisterEmailChanged(value)),
-                      ),
-                      const SizedBox(height: 16),
-
-                      CustomTextField(
-                        label: 'Contact Number',
-                        hint: '0917xxxxxxx',
-                        controller: _contactController,
-                        keyboardType: TextInputType.phone,
-                        prefixIcon: const Icon(Icons.phone_outlined),
-                        onChanged: (value) => context
-                            .read<RegisterBloc>()
-                            .add(RegisterContactNumberChanged(value)),
-                      ),
-                      const SizedBox(height: 16),
-
-                      CustomTextField(
-                        label: 'Password',
-                        hint: 'At least 6 characters',
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        prefixIcon: const Icon(Icons.lock_outlined),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                          onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword),
-                        ),
-                        onChanged: (value) => context
-                            .read<RegisterBloc>()
-                            .add(RegisterPasswordChanged(value)),
-                      ),
-                      const SizedBox(height: 16),
-
-                      CustomTextField(
-                        label: 'Confirm Password',
-                        hint: 'Re-enter your password',
-                        controller: _confirmPasswordController,
-                        obscureText: _obscureConfirm,
-                        prefixIcon: const Icon(Icons.lock_outlined),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureConfirm
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                          onPressed: () => setState(
-                              () => _obscureConfirm = !_obscureConfirm),
-                        ),
-                        onChanged: (value) => context
-                            .read<RegisterBloc>()
-                            .add(RegisterConfirmPasswordChanged(value)),
-                      ),
-
-                      // ═══════════════════════════════════════════════
-                      //  FARMER‑SPECIFIC FIELDS
-                      // ═══════════════════════════════════════════════
-                      if (_selectedRole == UserRole.farmer) ...[
-                        const SizedBox(height: 24),
-                        _SectionHeader('Farm Details'),
-                        const SizedBox(height: 16),
-
-                        CustomTextField(
-                          label: 'Farm / Business Name',
-                          hint: 'e.g. Green Valley Farm',
-                          controller: _farmNameController,
-                          prefixIcon: const Icon(Icons.store_outlined),
-                          onChanged: (value) => context
-                              .read<RegisterBloc>()
-                              .add(RegisterFarmNameChanged(value)),
-                        ),
-                        const SizedBox(height: 16),
-
-                        CustomTextField(
-                          label: 'Farm Location',
-                          hint: 'e.g. Brgy. San Jose, General Trias',
-                          controller: _farmLocationController,
-                          prefixIcon: const Icon(Icons.location_on_outlined),
-                          onChanged: (value) => context
-                              .read<RegisterBloc>()
-                              .add(RegisterFarmLocationChanged(value)),
-                        ),
-                        const SizedBox(height: 16),
-
-                        CustomTextField(
-                          label: 'Primary Produce Type',
-                          hint: 'e.g. Lettuce, Tomatoes, Pechay',
-                          controller: _produceTypeController,
-                          prefixIcon: const Icon(Icons.eco_outlined),
-                          onChanged: (value) => context
-                              .read<RegisterBloc>()
-                              .add(RegisterProduceTypeChanged(value)),
-                        ),
-                      ],
-
-                      const SizedBox(height: 20),
-
-                      // ── Error ───────────────────────────────────────
-                      if (errorText != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            children: [
-                              Icon(Icons.error_outline,
-                                  size: 18, color: Colors.redAccent),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  errorText,
-                                  style: AppTypography.caption(
-                                    color: Colors.redAccent,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                      // ── Submit ──────────────────────────────────────
-                      SizedBox(
-                        width: double.infinity,
-                        child: CustomButton(
-                          label: isLoading ? 'Creating account…' : 'Sign Up',
-                          onPressed: isLoading
-                              ? null
-                              : () => context
-                                  .read<RegisterBloc>()
-                                  .add(const RegisterSubmitted()),
-                          isLoading: isLoading,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      _SignInLink(),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                ),
+    return BlocConsumer<RegisterBloc, RegisterState>(
+      listener: (context, state) {
+        if (state is RegisterOtpSent && mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => OtpScreen(
+                signUpData: state.data,
+                onSuccess: widget.onSuccess,
               ),
             ),
           );
-        },
-      ),
+        }
+        if (state is RegisterFailure && mounted) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: ColorUtils.darkBackground,
+              title: const Text('Registration Failed',
+                  style: TextStyle(color: Colors.white)),
+              content: Text(state.error,
+                  style: const TextStyle(color: Colors.white70)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text('OK',
+                      style: TextStyle(color: ColorUtils.primary)),
+                ),
+              ],
+            ),
+          );
+        }
+      },
+      builder: (context, state) {
+        final isLoading = state is RegisterLoading;
+
+        return Scaffold(
+          backgroundColor: ColorUtils.darkBackground,
+          body: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 16),
+                    const LogoWidget(),
+                    const SizedBox(height: 24),
+
+                    // ── Heading ─────────────────────────────────────
+                    Text(
+                      'Create Account',
+                      style: AppTypography.heading3(
+                        color: ColorUtils.pureWhite,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Join as a Farmer or Consumer',
+                      style: AppTypography.bodyMedium(
+                        color: ColorUtils.pureWhite.withValues(alpha: 0.6),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+
+                    // ── Role selector ───────────────────────────────
+                    _RoleSelector(
+                      initial: _selectedRole,
+                      onChanged: (role) {
+                        setState(() => _selectedRole = role);
+                        context
+                            .read<RegisterBloc>()
+                            .add(RegisterRoleChanged(role));
+                      },
+                    ),
+                    const SizedBox(height: 28),
+
+                    // ═══════════════════════════════════════════════
+                    //  SHARED FIELDS
+                    // ═══════════════════════════════════════════════
+
+                    CustomTextField(
+                      label: 'Full Name',
+                      hint: 'Juan Dela Cruz',
+                      controller: _nameController,
+                      prefixIcon: const Icon(Icons.person_outline),
+                      onChanged: (value) => context
+                          .read<RegisterBloc>()
+                          .add(RegisterNameChanged(value)),
+                    ),
+                    const SizedBox(height: 16),
+
+                    CustomTextField(
+                      label: 'Email',
+                      hint: 'you@example.com',
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      onChanged: (value) => context
+                          .read<RegisterBloc>()
+                          .add(RegisterEmailChanged(value)),
+                    ),
+                    const SizedBox(height: 16),
+
+                    CustomTextField(
+                      label: 'Contact Number',
+                      hint: '0917xxxxxxx',
+                      controller: _contactController,
+                      keyboardType: TextInputType.phone,
+                      prefixIcon: const Icon(Icons.phone_outlined),
+                      onChanged: (value) => context
+                          .read<RegisterBloc>()
+                          .add(RegisterContactNumberChanged(value)),
+                    ),
+                    const SizedBox(height: 16),
+
+                    CustomTextField(
+                      label: 'Password',
+                      hint: 'At least 6 characters',
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      prefixIcon: const Icon(Icons.lock_outlined),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                        ),
+                        onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword),
+                      ),
+                      onChanged: (value) => context
+                          .read<RegisterBloc>()
+                          .add(RegisterPasswordChanged(value)),
+                    ),
+                    const SizedBox(height: 16),
+
+                    CustomTextField(
+                      label: 'Confirm Password',
+                      hint: 'Re-enter your password',
+                      controller: _confirmPasswordController,
+                      obscureText: _obscureConfirm,
+                      prefixIcon: const Icon(Icons.lock_outlined),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureConfirm
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                        ),
+                        onPressed: () => setState(
+                            () => _obscureConfirm = !_obscureConfirm),
+                      ),
+                      onChanged: (value) => context
+                          .read<RegisterBloc>()
+                          .add(RegisterConfirmPasswordChanged(value)),
+                    ),
+
+                    // ═══════════════════════════════════════════════
+                    //  FARMER‑SPECIFIC FIELDS
+                    // ═══════════════════════════════════════════════
+                    if (_selectedRole == UserRole.farmer) ...[
+                      const SizedBox(height: 24),
+                      _SectionHeader('Farm Details'),
+                      const SizedBox(height: 16),
+
+                      CustomTextField(
+                        label: 'Farm / Business Name',
+                        hint: 'e.g. Green Valley Farm',
+                        controller: _farmNameController,
+                        prefixIcon: const Icon(Icons.store_outlined),
+                        onChanged: (value) => context
+                            .read<RegisterBloc>()
+                            .add(RegisterFarmNameChanged(value)),
+                      ),
+                      const SizedBox(height: 16),
+
+                      CustomTextField(
+                        label: 'Farm Location',
+                        hint: 'e.g. Brgy. San Jose, General Trias',
+                        controller: _farmLocationController,
+                        prefixIcon: const Icon(Icons.location_on_outlined),
+                        onChanged: (value) => context
+                            .read<RegisterBloc>()
+                            .add(RegisterFarmLocationChanged(value)),
+                      ),
+                      const SizedBox(height: 16),
+
+                      CustomTextField(
+                        label: 'Primary Produce Type',
+                        hint: 'e.g. Lettuce, Tomatoes, Pechay',
+                        controller: _produceTypeController,
+                        prefixIcon: const Icon(Icons.eco_outlined),
+                        onChanged: (value) => context
+                            .read<RegisterBloc>()
+                            .add(RegisterProduceTypeChanged(value)),
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+
+                    // ── Submit ──────────────────────────────────────
+                    SizedBox(
+                      width: double.infinity,
+                      child: CustomButton(
+                        label: isLoading ? 'Creating account…' : 'Sign Up',
+                        onPressed: isLoading
+                            ? null
+                            : () => context
+                                .read<RegisterBloc>()
+                                .add(const RegisterSubmitted()),
+                        isLoading: isLoading,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    _SignInLink(),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
