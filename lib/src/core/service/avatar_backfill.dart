@@ -3,32 +3,36 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// One-time migration helper that uploads `assets/logo.png` to the avatars
-/// storage bucket and backfills every profile that has null or empty
-/// `avatar_url` with the shared default URL.
+/// One-time migration helper that uploads `assets/logo.png` to the current
+/// user's avatar path in the avatars storage bucket.
+///
+/// Uploads to `$userId/avatar.jpg` so the RLS policy
+/// `(storage.foldername(name))[1] = auth.uid()` passes.
 ///
 /// Call from anywhere in the app:
 /// ```dart
-/// await AvatarBackfill.run(Supabase.instance.client);
+/// await AvatarBackfill.setDefaultAvatar(Supabase.instance.client, userId: userId);
 /// ```
 class AvatarBackfill {
-  static const _defaultPath = '_default/logo.png';
-
-  /// Runs the full backfill.
+  /// Ensures the current user has a default avatar in storage.
+  ///
+  /// 1. Uploads `assets/logo.png` to `avatars/$userId/avatar.jpg` (upsert).
+  /// 2. Updates the user's `avatar_url` to the public URL.
   ///
   /// [supabase] — the Supabase client.
+  /// [userId] — the user to backfill (must match the current session).
   /// [logoFile] — optional pre-loaded file (useful in tests).
-  ///               When null, loads from `assets/logo.png` and writes a temp file.
-  static Future<int> run(
+  static Future<String> setDefaultAvatar(
     SupabaseClient supabase, {
+    required String userId,
     File? logoFile,
   }) async {
-    // 1. Resolve logo file
     final file = logoFile ?? await _tempFileFromAsset();
+    final path = '$userId/avatar.jpg';
 
-    // 2. Upload to shared path (idempotent — upsert: true)
+    // Upload to the user's own path (RLS friendly)
     await supabase.storage.from('avatars').upload(
-          _defaultPath,
+          path,
           file,
           fileOptions: const FileOptions(
             upsert: true,
@@ -36,28 +40,15 @@ class AvatarBackfill {
           ),
         );
 
-    final defaultUrl =
-        supabase.storage.from('avatars').getPublicUrl(_defaultPath);
+    final publicUrl = supabase.storage.from('avatars').getPublicUrl(path);
 
-    // 3. Fetch profiles with null or empty avatar_url
-    //    Supabase or() syntax: comma-separated conditions for the same column
-    final profiles = await supabase
+    // Update the profile row
+    await supabase
         .from('profiles')
-        .select('id, avatar_url')
-        .or('avatar_url.is.null,avatar_url.eq.');
+        .update({'avatar_url': publicUrl})
+        .eq('id', userId);
 
-    if (profiles.isEmpty) return 0;
-
-    // 4. Update each profile
-    for (final row in profiles) {
-      final id = row['id'] as String;
-      await supabase
-          .from('profiles')
-          .update({'avatar_url': defaultUrl})
-          .eq('id', id);
-    }
-
-    return profiles.length;
+    return publicUrl;
   }
 
   /// Writes `assets/logo.png` from the asset bundle to a temp file.

@@ -1,7 +1,9 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/auth_models.dart';
+import '../service/avatar_backfill.dart';
 import '../service/email_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -160,22 +162,7 @@ class SupabaseAuthRepository implements AuthRepository {
       'p_contact_number': data.contactNumber,
     });
 
-    // 3. Set default avatar_url so the profile always has a non-null value
-    //    (shared default in the avatars bucket, or empty string as fallback).
-    const defaultPath = '_default/logo.png';
-    String defaultUrl;
-    try {
-      defaultUrl =
-          _supabase.storage.from('avatars').getPublicUrl(defaultPath);
-    } catch (_) {
-      defaultUrl = '';
-    }
-    await _supabase
-        .from('profiles')
-        .update({'avatar_url': defaultUrl})
-        .eq('id', userId);
-
-    // 4. Create farm if farmer
+    // 3. Create farm if farmer
     if (data.role == UserRole.farmer && data.farm != null) {
       await _supabase.rpc('create_farm', params: {
         'p_owner_id': userId,
@@ -196,6 +183,24 @@ class SupabaseAuthRepository implements AuthRepository {
     );
     if (response.user == null) {
       throw Exception('Invalid email or password');
+    }
+
+    // Backfill avatar_url for existing users whose profile still has null.
+    // This ensures everyone gets a default avatar after the storage RLS
+    // migration — runs right after login while the session is definitely active.
+    try {
+      final userId = response.user!.id;
+      final profile = await _supabase
+          .from('profiles')
+          .select('avatar_url')
+          .eq('id', userId)
+          .maybeSingle();
+      final avatarUrl = profile?['avatar_url'] as String?;
+      if (avatarUrl == null || avatarUrl.isEmpty) {
+        await AvatarBackfill.setDefaultAvatar(_supabase, userId: userId);
+      }
+    } catch (e) {
+      debugPrint('AvatarBackfill failed during signIn: $e');
     }
   }
 

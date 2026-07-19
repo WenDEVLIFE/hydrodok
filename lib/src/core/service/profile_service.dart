@@ -11,17 +11,6 @@ class ProfileService {
 
   ProfileService({required SupabaseClient supabase}) : _supabase = supabase;
 
-  /// Returns the public URL for the user's avatar, or null if none
-  /// has been uploaded (caller should fall back to the default asset).
-  String? getAvatarUrl(String userId) {
-    final path = '$userId/avatar.jpg';
-    // getPublicUrl always returns a URL even if the file doesn't exist,
-    // so we can't distinguish "no avatar" from "has avatar" this way.
-    // The caller should check the profile's avatar_url column instead.
-    final url = _supabase.storage.from(_bucket).getPublicUrl(path);
-    return url;
-  }
-
   /// Returns the user's profile row [avatar_url] value, or null if empty.
   Future<String?> getStoredAvatarUrl(String userId) async {
     final result = await _supabase
