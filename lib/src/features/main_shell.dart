@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../widget/bottom_nav_bar.dart';
 import 'map/map_screen.dart';
+import 'profile/profile_screen.dart';
 
 /// Root shell that hosts the bottom nav and switches between feature screens.
 class MainShell extends StatefulWidget {
@@ -21,7 +22,7 @@ class _MainShellState extends State<MainShell> {
     _Placeholder(label: 'Forum'),
     _Placeholder(label: 'Pest ID'),
     _Placeholder(label: 'Pooling'),
-    _Placeholder(label: 'Profile'),
+    ProfileScreen(),
   ];
 
   @override
