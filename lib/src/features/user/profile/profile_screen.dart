@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/repositories/auth_repository.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
+import '../../login/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -95,11 +99,80 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   title: 'Settings',
                   subtitle: 'Notifications, privacy, help',
                 ),
+                const SizedBox(height: 20),
+
+                // ── Logout Button ────────────────────────────────────
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _handleLogout(context),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFD84040)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    icon: const Icon(
+                      LucideIcons.logOut,
+                      color: Color(0xFFD84040),
+                      size: 18,
+                    ),
+                    label: Text(
+                      'Log Out',
+                      style: AppTypography.button(
+                        color: const Color(0xFFD84040),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _handleLogout(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Log Out'),
+        content: const Text('Are you sure you want to log out of HydroDok?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Log Out',
+              style: TextStyle(color: Color(0xFFD84040)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !context.mounted) return;
+
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (_) {}
+
+    if (!context.mounted) return;
+
+    final authRepo = context.read<AuthRepository>();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => LoginScreen(
+          authRepository: authRepo,
+        ),
+      ),
+      (route) => false,
     );
   }
 

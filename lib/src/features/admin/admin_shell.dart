@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/repositories/auth_repository.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
+import '../login/login_screen.dart';
 import 'accounts/account_moderation_screen.dart';
 import 'banner_manager/banner_manager_screen.dart';
 import 'farms/farm_management_screen.dart';
@@ -235,11 +239,61 @@ class _AdminShellState extends State<AdminShell> {
                     ],
                   ),
                 ),
+                IconButton(
+                  icon: const Icon(
+                    LucideIcons.logOut,
+                    color: Color(0xFFD84040),
+                    size: 18,
+                  ),
+                  tooltip: 'Log Out',
+                  onPressed: () => _handleAdminLogout(context),
+                ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _handleAdminLogout(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Log Out Admin'),
+        content: const Text('Are you sure you want to log out of the Admin Panel?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Log Out',
+              style: TextStyle(color: Color(0xFFD84040)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !context.mounted) return;
+
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (_) {}
+
+    if (!context.mounted) return;
+
+    final authRepo = context.read<AuthRepository>();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => LoginScreen(
+          authRepository: authRepo,
+        ),
+      ),
+      (route) => false,
     );
   }
 }
