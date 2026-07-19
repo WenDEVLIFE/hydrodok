@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
+import 'accounts/account_moderation_screen.dart';
 import 'issue_reports/issue_reports_screen.dart';
 
 // ── Sidebar item model ─────────────────────────────────────────────────────
@@ -39,6 +40,8 @@ class _AdminShellState extends State<AdminShell> {
     switch (_currentIndex) {
       case 0:
         return const IssueReportsScreen();
+      case 2:
+        return const AccountModerationScreen();
       default:
         return Center(
           child: Text(
