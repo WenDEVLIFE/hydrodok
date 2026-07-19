@@ -5,9 +5,11 @@ import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import 'accounts/account_moderation_screen.dart';
 import 'banner_manager/banner_manager_screen.dart';
+import 'farms/farm_management_screen.dart';
 import 'forum_moderation/forum_moderation_screen.dart';
 import 'issue_reports/issue_reports_screen.dart';
 import 'marketplace/marketplace_management_screen.dart';
+import 'settings/admin_settings_screen.dart';
 
 // ── Sidebar item model ─────────────────────────────────────────────────────
 
@@ -23,6 +25,7 @@ const _sidebarItems = <_SidebarItem>[
   _SidebarItem(icon: LucideIcons.image, label: 'Banner Manager'),
   _SidebarItem(icon: LucideIcons.users, label: 'Accounts'),
   _SidebarItem(icon: LucideIcons.store, label: 'Marketplace'),
+  _SidebarItem(icon: LucideIcons.sprout, label: 'Farms'),
   _SidebarItem(icon: LucideIcons.messageCircle, label: 'Forum Moderation'),
   _SidebarItem(icon: LucideIcons.settings, label: 'Settings'),
 ];
@@ -50,7 +53,11 @@ class _AdminShellState extends State<AdminShell> {
       case 3:
         return const MarketplaceManagementScreen();
       case 4:
+        return const FarmManagementScreen();
+      case 5:
         return const ForumModerationScreen();
+      case 6:
+        return const AdminSettingsScreen();
       default:
         return Center(
           child: Text(
