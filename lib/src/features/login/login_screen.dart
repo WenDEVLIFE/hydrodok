@@ -191,6 +191,32 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 24),
+
+                      // ── DEV: Skip login ──────────────────────────────
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(builder: (_) => widget.onSuccess),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: ColorUtils.pureWhite.withValues(alpha: 0.3),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: Text(
+                            'Test: Skip to App →',
+                            style: AppTypography.button(
+                              color: ColorUtils.pureWhite.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 16),
                     ],
                   ),

@@ -10,6 +10,7 @@ import 'src/core/service/profile_service.dart';
 import 'src/core/utils/color_utils.dart';
 import 'src/core/utils/typography.dart';
 import 'src/features/login/login_screen.dart';
+import 'src/features/main_shell.dart';
 import 'src/features/splash_screen/splash_screen.dart';
 import 'src/widget/profile_avatar.dart';
 
@@ -89,7 +90,7 @@ class _AfterSplash extends StatelessWidget {
   Widget build(BuildContext context) {
     return LoginScreen(
       authRepository: context.read<AuthRepository>(),
-      onSuccess: const _HomePlaceholder(),
+      onSuccess: const MainShell(),
     );
   }
 }

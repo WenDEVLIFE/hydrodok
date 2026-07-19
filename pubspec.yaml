@@ -47,6 +47,9 @@ dependencies:
   mailer: ^6.0.1
   email_sender: ^2.1.0
   flutter_sliding_toast: ^1.5.3
+  flutter_map: ^8.3.1
+  latlong2: ^0.9.1
+  geolocator: ^13.0.2
 
 dev_dependencies:
   flutter_test:
