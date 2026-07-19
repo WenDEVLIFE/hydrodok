@@ -14,22 +14,34 @@ class ProfileService {
   /// Returns the public URL for the user's avatar, or null if none
   /// has been uploaded (caller should fall back to the default asset).
   String? getAvatarUrl(String userId) {
-    final path = '${userId}_profile/avatar.jpg';
-    final publicUrl = _supabase.storage.from(_bucket).getPublicUrl(path);
-
-    // Check if the file actually exists by trying to get its metadata.
-    // If it doesn't exist, return null so the caller shows the default.
-    // We use a simple HTTP HEAD check via the public URL.
-    return publicUrl; // Will 404 if not uploaded — caller handles fallback.
+    final path = '$userId/avatar.jpg';
+    // getPublicUrl always returns a URL even if the file doesn't exist,
+    // so we can't distinguish "no avatar" from "has avatar" this way.
+    // The caller should check the profile's avatar_url column instead.
+    final url = _supabase.storage.from(_bucket).getPublicUrl(path);
+    return url;
   }
 
-  /// Uploads an avatar image for [userId]. Returns the public URL.
+  /// Returns the user's profile row [avatar_url] value, or null if empty.
+  Future<String?> getStoredAvatarUrl(String userId) async {
+    final result = await _supabase
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', userId)
+        .maybeSingle();
+    if (result == null) return null;
+    final url = result['avatar_url'] as String?;
+    return (url != null && url.isNotEmpty) ? url : null;
+  }
+
+  /// Uploads an avatar image for [userId] and updates the profile's
+  /// avatar_url in the database. Returns the public URL.
   /// [imageFile] must be a valid image file (jpg/png).
   Future<String> uploadAvatar({
     required String userId,
     required File imageFile,
   }) async {
-    final path = '${userId}_profile/avatar.jpg';
+    final path = '$userId/avatar.jpg';
 
     await _supabase.storage.from(_bucket).upload(
           path,
@@ -40,16 +52,29 @@ class ProfileService {
           ),
         );
 
-    return _supabase.storage.from(_bucket).getPublicUrl(path);
+    final publicUrl = _supabase.storage.from(_bucket).getPublicUrl(path);
+
+    // Persist the URL in the profile row so the app knows
+    // an avatar has been uploaded.
+    await _supabase.from('profiles').update({
+      'avatar_url': publicUrl,
+    }).eq('id', userId);
+
+    return publicUrl;
   }
 
-  /// Deletes the user's current avatar from storage.
+  /// Deletes the user's current avatar from storage and clears
+  /// avatar_url in the profile row.
   Future<void> deleteAvatar(String userId) async {
-    final path = '${userId}_profile/avatar.jpg';
+    final path = '$userId/avatar.jpg';
     try {
       await _supabase.storage.from(_bucket).remove([path]);
     } catch (_) {
       // File doesn't exist — nothing to delete.
     }
+    // Also clear the avatar_url in the profile.
+    await _supabase.from('profiles').update({
+      'avatar_url': '',
+    }).eq('id', userId);
   }
 }

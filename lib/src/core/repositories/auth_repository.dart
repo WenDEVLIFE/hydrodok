@@ -146,15 +146,35 @@ class SupabaseAuthRepository implements AuthRepository {
     }
 
     // 2. Create profile via SECURITY DEFINER function (bypasses RLS)
+    //    Pass userId explicitly instead of relying on auth.uid() inside
+    //    the function, because the session may not be fully established
+    //    right after signUp.
     await _supabase.rpc('create_user_profile', params: {
+      'p_user_id': userId,
       'p_role': data.role.name,
       'p_full_name': data.name,
       'p_contact_number': data.contactNumber,
     });
 
-    // 3. Create farm if farmer
+    // 3. Set default avatar_url so the profile always has a non-null value
+    //    (shared default in the avatars bucket, or empty string as fallback).
+    const defaultPath = '_default/logo.png';
+    String defaultUrl;
+    try {
+      defaultUrl =
+          _supabase.storage.from('avatars').getPublicUrl(defaultPath);
+    } catch (_) {
+      defaultUrl = '';
+    }
+    await _supabase
+        .from('profiles')
+        .update({'avatar_url': defaultUrl})
+        .eq('id', userId);
+
+    // 4. Create farm if farmer
     if (data.role == UserRole.farmer && data.farm != null) {
       await _supabase.rpc('create_farm', params: {
+        'p_owner_id': userId,
         'p_farm_name': data.farm!.farmName,
         'p_address': data.farm!.location,
         'p_produce_types': [data.farm!.produceType],

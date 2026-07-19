@@ -4,11 +4,14 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'src/core/repositories/auth_repository.dart';
+import 'src/core/service/avatar_backfill.dart';
 import 'src/core/service/email_service.dart';
+import 'src/core/service/profile_service.dart';
 import 'src/core/utils/color_utils.dart';
 import 'src/core/utils/typography.dart';
 import 'src/features/login/login_screen.dart';
 import 'src/features/splash_screen/splash_screen.dart';
+import 'src/widget/profile_avatar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,8 +26,13 @@ void main() async {
   );
 
   runApp(
-    RepositoryProvider<AuthRepository>.value(
-      value: authRepository,
+    MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<AuthRepository>.value(value: authRepository),
+        RepositoryProvider<ProfileService>.value(
+          value: ProfileService(supabase: Supabase.instance.client),
+        ),
+      ],
       child: const HydrodokApp(),
     ),
   );
@@ -84,8 +92,62 @@ class _AfterSplash extends StatelessWidget {
 }
 
 /// Temporary home while the app is in early development.
-class _HomePlaceholder extends StatelessWidget {
+class _HomePlaceholder extends StatefulWidget {
   const _HomePlaceholder();
+
+  @override
+  State<_HomePlaceholder> createState() => _HomePlaceholderState();
+}
+
+class _HomePlaceholderState extends State<_HomePlaceholder> {
+  String? _avatarUrl;
+  String _userName = '';
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final result = await supabase
+        .from('profiles')
+        .select('avatar_url, full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    var avatarUrl = result?['avatar_url'] as String?;
+    final name = result?['full_name'] as String? ?? '';
+
+    // If the user still has no avatar_url (e.g. pre-migration profile),
+    // ensure the shared default is uploaded and assign it.
+    if (avatarUrl == null || avatarUrl.isEmpty) {
+      try {
+        await AvatarBackfill.run(supabase);
+        // Re-fetch after backfill
+        final updated = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .maybeSingle();
+        avatarUrl = updated?['avatar_url'] as String?;
+      } catch (_) {
+        // Backfill failed — ProfileAvatar shows logo.png asset fallback
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _avatarUrl = avatarUrl;
+      _userName = name;
+      _loading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -100,12 +162,20 @@ class _HomePlaceholder extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.radar,
-                size: 64,
-                color: ColorUtils.primary,
+              ProfileAvatar(
+                imageUrl: _loading ? null : _avatarUrl,
+                radius: 40,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              if (!_loading && _userName.isNotEmpty)
+                Text(
+                  _userName,
+                  style: AppTypography.heading3(
+                    color: ColorUtils.pureWhite,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              const SizedBox(height: 8),
               Text(
                 'Your hydroponic farm manager',
                 style: AppTypography.heading3(

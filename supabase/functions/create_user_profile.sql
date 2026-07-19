@@ -12,6 +12,7 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 create or replace function create_user_profile(
+  p_user_id uuid,
   p_role text,
   p_full_name text,
   p_contact_number text
@@ -21,21 +22,14 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
-declare
-  v_user_id uuid;
 begin
-  v_user_id := auth.uid();
-  if v_user_id is null then
-    raise exception 'Not authenticated';
-  end if;
-
   insert into public.profiles (
     id, role, full_name, phone, contact_number, avatar_url, onboarding_completed
   ) values (
-    v_user_id, p_role, p_full_name, p_contact_number, p_contact_number, '', false
+    p_user_id, p_role, p_full_name, p_contact_number, p_contact_number, '', false
   );
 
-  return v_user_id;
+  return p_user_id;
 end;
 $$;
 
@@ -44,6 +38,7 @@ $$;
 -- ─────────────────────────────────────────────────────────────────────────────
 
 create or replace function create_farm(
+  p_owner_id uuid,
   p_farm_name text,
   p_address text,
   p_produce_types text[]
@@ -57,7 +52,7 @@ declare
   v_farm_id uuid;
 begin
   insert into public.farms (owner_id, farm_name, address, produce_types, status, latitude, longitude)
-  values (auth.uid(), p_farm_name, p_address, p_produce_types, 'active', 0, 0)
+  values (p_owner_id, p_farm_name, p_address, p_produce_types, 'active', 0, 0)
   returning id into v_farm_id;
 
   return v_farm_id;
