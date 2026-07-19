@@ -28,10 +28,11 @@ class FitFormBottomNav extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildNavItem(context, 0, LucideIcons.home, 'Home'),
-          _buildNavItem(context, 1, LucideIcons.dumbbell, 'Workout'),
-          _buildNavItem(context, 2, LucideIcons.lineChart, 'Stats'),
-          _buildNavItem(context, 3, LucideIcons.user, 'Profile'),
+          _buildNavItem(context, 0, LucideIcons.map, 'Map'),
+          _buildNavItem(context, 1, LucideIcons.messageCircleCheck100, 'Forum'),
+          _buildNavItem(context, 2, LucideIcons.bug, 'PEST ID'),
+          _buildNavItem(context, 3, LucideIcons.box, 'Pooling'),
+          _buildNavItem(context, 4, LucideIcons.user, 'Profile'),
         ],
       ),
     );
