@@ -3,14 +3,13 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'src/core/utils/color_utils.dart';
 import 'src/core/utils/typography.dart';
+import 'src/features/login/login_screen.dart';
 import 'src/features/splash_screen/splash_screen.dart';
 
 void main() async {
-
   initializeSupabase();
   runApp(const HydrodokApp());
 }
-
 
 Future<bool> initializeSupabase() async {
   try {
@@ -49,8 +48,19 @@ class HydrodokApp extends StatelessWidget {
         colorScheme: ColorUtils.darkColorScheme,
         useMaterial3: true,
       ),
-      home: const SplashScreen(nextScreen: _HomePlaceholder()),
+      home: const SplashScreen(nextScreen: _AfterSplash()),
     );
+  }
+}
+
+/// What the user sees after the splash animation finishes.
+/// Currently routes to login; on success, goes to the home placeholder.
+class _AfterSplash extends StatelessWidget {
+  const _AfterSplash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const LoginScreen(onSuccess: _HomePlaceholder());
   }
 }
 
@@ -87,7 +97,7 @@ class _HomePlaceholder extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Text(
-                'Your app content goes here.',
+                'You are logged in!',
                 style: AppTypography.bodyMedium(
                   color: ColorUtils.pureWhite.withValues(alpha: 0.6),
                 ),
