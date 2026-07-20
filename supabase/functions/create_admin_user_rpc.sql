@@ -5,71 +5,126 @@
 -- =============================================================================
 
 -- Make sure required extensions are available
--- (uuid-ossp for uuid_generate_v4, pgcrypto for crypt/gen_salt)
-create extension if not exists "uuid-ossp";
-create extension if not exists "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- Ensure the profiles table can store the admin email for display
-alter table public.profiles add column if not exists email text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email text;
 
-create or replace function public.create_admin_user(
+CREATE OR REPLACE FUNCTION public.create_admin_user(
   email text,
   password text,
   full_name text
 )
-returns uuid
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
   v_user_id uuid;
-begin
+  v_instance_id uuid;
+BEGIN
   -- Only existing admins can call this function
-  if not public.is_admin() then
-    raise exception 'Only admins can create admin users';
-  end if;
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Only admins can create admin users';
+  END IF;
 
   -- Generate a fresh user id
   v_user_id := extensions.uuid_generate_v4();
 
-  -- Insert the auth user. This requires postgres/service-role privileges
-  -- because direct writes to auth.users are normally restricted.
-  insert into auth.users (
+  -- Fetch instance_id from existing auth.users or default
+  SELECT instance_id INTO v_instance_id FROM auth.users LIMIT 1;
+  IF v_instance_id IS NULL THEN
+    v_instance_id := '00000000-0000-0000-0000-000000000000'::uuid;
+  END IF;
+
+  -- 1. Insert into auth.users (email_confirmed_at automatically satisfies confirmed_at)
+  INSERT INTO auth.users (
+    instance_id,
     id,
+    aud,
+    role,
     email,
     encrypted_password,
     email_confirmed_at,
     created_at,
     updated_at,
     raw_app_meta_data,
-    raw_user_meta_data
-  ) values (
+    raw_user_meta_data,
+    is_super_admin
+  ) VALUES (
+    v_instance_id,
     v_user_id,
-    email,
+    'authenticated',
+    'authenticated',
+    lower(email),
     extensions.crypt(password, extensions.gen_salt('bf')),
     now(),
     now(),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
-    jsonb_build_object('full_name', full_name)
+    jsonb_build_object('full_name', full_name),
+    false
   );
 
-  -- Create (or overwrite) the public profile as an admin
-  insert into public.profiles (
-    id, role, full_name, email, onboarding_completed, avatar_url
-  ) values (
-    v_user_id, 'admin', full_name, create_admin_user.email, true, ''
-  )
-  on conflict (id) do update set
-    role = excluded.role,
-    full_name = excluded.full_name,
-    email = excluded.email,
-    onboarding_completed = excluded.onboarding_completed;
+  -- 2. Insert into auth.identities (REQUIRED by Supabase GoTrue Auth)
+  BEGIN
+    INSERT INTO auth.identities (
+      id,
+      user_id,
+      identity_data,
+      provider,
+      last_sign_in_at,
+      created_at,
+      updated_at,
+      provider_id
+    ) VALUES (
+      v_user_id,
+      v_user_id,
+      jsonb_build_object('sub', v_user_id::text, 'email', lower(email)),
+      'email',
+      now(),
+      now(),
+      now(),
+      v_user_id::text
+    );
+  EXCEPTION WHEN OTHERS THEN
+    INSERT INTO auth.identities (
+      id,
+      user_id,
+      identity_data,
+      provider,
+      last_sign_in_at,
+      created_at,
+      updated_at
+    ) VALUES (
+      v_user_id,
+      v_user_id,
+      jsonb_build_object('sub', v_user_id::text, 'email', lower(email)),
+      'email',
+      now(),
+      now(),
+      now()
+    );
+  END;
 
-  return v_user_id;
-end;
+  -- 3. Create public.profiles record
+  INSERT INTO public.profiles (
+    id, role, full_name, email, onboarding_completed, avatar_url
+  ) VALUES (
+    v_user_id, 'admin', full_name, lower(email), true, ''
+  )
+  ON CONFLICT (id) DO UPDATE SET
+    role = 'admin',
+    full_name = EXCLUDED.full_name,
+    email = EXCLUDED.email,
+    onboarding_completed = true;
+
+  RETURN v_user_id;
+END;
 $$;
 
--- Authenticated users can execute; the function itself enforces the admin check
-grant execute on function public.create_admin_user(text, text, text) to authenticated;
+-- Grant permissions
+GRANT EXECUTE ON FUNCTION public.create_admin_user(text, text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.create_admin_user(text, text, text) TO service_role;

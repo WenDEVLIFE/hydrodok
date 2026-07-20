@@ -293,16 +293,19 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               children: [
                 ..._adminProfiles.asMap().entries.expand((entry) {
                   final profile = entry.value;
+                  final adminId = profile['id'] as String? ?? '';
                   final name = profile['full_name'] as String? ?? 'Unnamed Admin';
                   final email = profile['email'] as String? ??
                       profile['phone'] as String? ??
                       'No email';
                   return [
                     _buildAdminUserItem(
+                      adminId: adminId,
                       name: name,
                       email: email,
                       role: 'Admin',
                       initials: _initialsFor(name),
+                      onDelete: () => _deleteAdminAccount(adminId, name),
                     ),
                     if (entry.key < _adminProfiles.length - 1)
                       const Divider(height: 20),
@@ -572,12 +575,67 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     );
   }
 
+  Future<void> _deleteAdminAccount(String adminId, String adminName) async {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    if (adminId == currentUserId) {
+      _showSnackBar('You cannot delete your own account while logged in.', isError: true);
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(LucideIcons.triangleAlert, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete Admin Account'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete the admin account for "$adminName"? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete Admin Account', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await _service.deleteUserAccount(adminId);
+        if (mounted) {
+          _showSnackBar('Admin account deleted successfully.');
+          _refreshAdminProfiles();
+        }
+      } catch (e) {
+        if (mounted) {
+          _showSnackBar('Failed to delete admin account: $e', isError: true);
+        }
+      }
+    }
+  }
+
   Widget _buildAdminUserItem({
+    required String adminId,
     required String name,
     required String email,
     required String role,
     required String initials,
+    required VoidCallback onDelete,
   }) {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final isSelf = adminId == currentUserId;
+
     return Row(
       children: [
         Container(
@@ -631,6 +689,16 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               fontSize: 11,
             ),
           ),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+          icon: Icon(
+            LucideIcons.trash2,
+            size: 18,
+            color: isSelf ? Colors.grey.shade400 : Colors.red,
+          ),
+          tooltip: isSelf ? 'Cannot delete your own account' : 'Delete admin account',
+          onPressed: isSelf ? null : onDelete,
         ),
       ],
     );

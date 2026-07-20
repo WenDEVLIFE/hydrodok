@@ -41,7 +41,6 @@ class _AccountModerationScreenState extends State<AccountModerationScreen> {
       final profiles = List<Map<String, dynamic>>.from(profileResponse);
 
       // 2. Fetch all farms from DB
-      final farmResponse = await _farmRepository.getVerifiedFarms(); // Or query all farms
       final farms = List<Map<String, dynamic>>.from(await supabase.from('farms').select('*'));
 
       final Map<String, Map<String, dynamic>> farmMap = {};
@@ -164,6 +163,81 @@ class _AccountModerationScreenState extends State<AccountModerationScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _deleteUserAccount(
+    String userId,
+    String fullName,
+    String role,
+  ) async {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == currentUserId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You cannot delete your own account while logged in.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(LucideIcons.trash2, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Delete User Account'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete the $role account for "$fullName"? All associated farm and profile data will be permanently removed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete Account', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final supabase = Supabase.instance.client;
+        try {
+          await supabase.rpc('delete_user_account', params: {'target_user_id': userId});
+        } catch (_) {
+          await supabase.from('profiles').delete().eq('id', userId);
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account deleted successfully.'),
+              backgroundColor: ColorUtils.forestGreen,
+            ),
+          );
+        }
+        _fetchAccounts();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete account: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   Widget _buildAccountCard(
@@ -292,6 +366,24 @@ class _AccountModerationScreenState extends State<AccountModerationScreen> {
               ],
             ),
           ],
+
+          const SizedBox(height: 12),
+          const Divider(),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: BorderSide(color: Colors.red.shade300),
+                ),
+                icon: const Icon(LucideIcons.trash2, size: 16),
+                label: const Text('Delete Account'),
+                onPressed: () => _deleteUserAccount(userId, fullName, role),
+              ),
+            ],
+          ),
         ],
       ),
     );

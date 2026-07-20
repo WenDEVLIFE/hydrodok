@@ -157,4 +157,22 @@ class AdminSettingsService {
       throw Exception('Failed to load admin profiles: $e');
     }
   }
+
+  /// Deletes an admin or user account by target user ID.
+  Future<void> deleteUserAccount(String userId) async {
+    try {
+      await _supabase.rpc(
+        'delete_user_account',
+        params: {'target_user_id': userId},
+      );
+    } catch (e) {
+      debugPrint('deleteUserAccount RPC failed: $e, attempting direct profile delete');
+      try {
+        await _supabase.from('profiles').delete().eq('id', userId);
+      } catch (e2) {
+        debugPrint('deleteUserAccount direct delete also failed: $e2');
+        throw Exception('Failed to delete account: $e2');
+      }
+    }
+  }
 }
