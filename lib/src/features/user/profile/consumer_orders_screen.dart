@@ -173,8 +173,7 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
 
   Widget _buildOrderCard(Map<String, dynamic> order) {
     final status = order['status'] as String? ?? 'pending';
-    final total = (order['total'] as num?)?.toDouble() ??
-        (order['total_price'] as num?)?.toDouble() ?? 0;
+    final total = (order['total'] as num?)?.toDouble() ?? 0;
     final createdAt = order['created_at'] as String? ?? '';
     final farmName = order['farm_name'] as String? ?? 'Unknown Farm';
     final deliveryAddr = order['delivery_address'] as String? ?? '';

@@ -14,42 +14,32 @@ class FarmerOrdersScreen extends StatefulWidget {
 }
 
 class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
-  String _selectedFilter = 'All'; // All | Pending | Confirmed | In Transit | Delivered | Cancelled
-  late final Stream<List<Map<String, dynamic>>> _ordersStream;
-
-  List<Map<String, dynamic>> _initialOrders = [];
+  String _selectedFilter = 'All';
+  late Future<List<Map<String, dynamic>>> _ordersFuture;
 
   @override
   void initState() {
     super.initState();
-    _initOrdersStream();
-    _loadInitialOrders();
+    _ordersFuture = _loadOrders();
   }
 
-  Future<void> _loadInitialOrders() async {
+  Future<List<Map<String, dynamic>>> _loadOrders() async {
     final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
-    try {
-      final response = await Supabase.instance.client
-          .from('orders')
-          .select('*')
-          .eq('farmer_id', user.id)
-          .order('created_at', ascending: false);
-      if (mounted) {
-        setState(() {
-          _initialOrders = List<Map<String, dynamic>>.from(response);
-        });
-      }
-    } catch (e) {
-      debugPrint('FarmerOrdersScreen initial load error: $e');
-    }
+    if (user == null) return [];
+
+    final response = await Supabase.instance.client
+        .from('orders')
+        .select('*, order_items(*, products:product_id(name))')
+        .eq('farmer_id', user.id)
+        .order('created_at', ascending: false);
+
+    return List<Map<String, dynamic>>.from(response);
   }
 
-  void _initOrdersStream() {
-    _ordersStream = Supabase.instance.client
-        .from('orders')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false);
+  void _reloadOrders() {
+    setState(() {
+      _ordersFuture = _loadOrders();
+    });
   }
 
   Future<void> _updateOrderStatus(String orderId, String newStatus) async {
@@ -58,6 +48,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
           .from('orders')
           .update({'status': newStatus})
           .eq('id', orderId);
+
+      _reloadOrders();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -168,18 +160,27 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
 
           // ── Orders List ──────────────────────────────────────────────────
           Expanded(
-            child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _ordersStream,
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _ordersFuture,
               builder: (context, snapshot) {
-                final rawList = snapshot.hasData && snapshot.data!.isNotEmpty
-                    ? snapshot.data!
-                    : _initialOrders;
+                if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                final user = Supabase.instance.client.auth.currentUser;
-                final filtered = rawList.where((o) {
-                  if (user != null && o['farmer_id'] != null && o['farmer_id'] != user.id) {
-                    return false;
-                  }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text(
+                        'Error loading orders: ${snapshot.error}',
+                        style: AppTypography.bodySmall(color: Colors.redAccent),
+                      ),
+                    ),
+                  );
+                }
+
+                final orders = snapshot.data ?? [];
+                final filtered = orders.where((o) {
                   final status = (o['status'] as String? ?? 'pending').toLowerCase();
                   if (_selectedFilter == 'Pending') return status == 'pending';
                   if (_selectedFilter == 'Confirmed') return status == 'confirmed';
@@ -188,10 +189,6 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                   if (_selectedFilter == 'Cancelled') return status == 'cancelled';
                   return true;
                 }).toList();
-
-                if (snapshot.connectionState == ConnectionState.waiting && rawList.isEmpty) {
-                  return const Center(child: CircularProgressIndicator());
-                }
 
                 if (filtered.isEmpty) {
                   return Center(
@@ -206,127 +203,119 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                   );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: filtered.length,
-                  itemBuilder: (ctx, index) {
-                    final order = filtered[index];
-                    final orderId = order['id'] as String;
-                    final status = order['status'] as String? ?? 'pending';
-                    final qty = (order['quantity'] as num?)?.toInt() ?? 1;
-                    final totalPrice = (order['total'] as num?)?.toDouble() ??
-                        (order['total_price'] as num?)?.toDouble() ?? 0;
-                    final buyerName = order['buyer_name'] as String? ?? order['customer_name'] as String? ?? 'Customer';
-                    final address = order['delivery_address'] as String? ?? 'Standard Delivery';
-
-                    final (String statusLabel, Color statusColor) = switch (status.toLowerCase()) {
-                      'confirmed' => ('Confirmed', ColorUtils.sageGreen),
-                      'in_transit' || 'in transit' => ('In Transit', Colors.blue),
-                      'delivered' => ('Delivered', ColorUtils.forestGreen),
-                      'cancelled' => ('Cancelled', Colors.red),
-                      _ => ('Pending', ColorUtils.terracotta),
-                    };
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Order #${orderId.substring(0, 8).toUpperCase()}',
-                                style: AppTypography.bodyMedium(fontWeight: FontWeight.bold, color: ColorUtils.darkText),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: statusColor.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  statusLabel,
-                                  style: TextStyle(
-                                    color: statusColor,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              const Icon(LucideIcons.user, size: 16, color: Colors.grey),
-                              const SizedBox(width: 6),
-                              Text(buyerName, style: AppTypography.bodySmall(color: ColorUtils.darkText)),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(LucideIcons.mapPin, size: 16, color: Colors.grey),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  address,
-                                  style: AppTypography.bodySmall(color: Colors.grey.shade600),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          const Divider(),
-                          const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '$qty x Produce Items',
-                                style: AppTypography.bodySmall(color: Colors.grey.shade600),
-                              ),
-                              Text(
-                                'PHP ${totalPrice.toStringAsFixed(0)}',
-                                style: AppTypography.heading3(color: ColorUtils.forestGreen, fontSize: 16),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () => _showStatusDialog(order),
-                              icon: const Icon(LucideIcons.refreshCw, size: 16),
-                              label: const Text('Update Order Status'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: ColorUtils.forestGreen,
-                                side: const BorderSide(color: ColorUtils.forestGreen),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                return RefreshIndicator(
+                  onRefresh: () async => _reloadOrders(),
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filtered.length,
+                    itemBuilder: (ctx, index) => _buildOrderCard(filtered[index]),
+                  ),
                 );
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrderCard(Map<String, dynamic> order) {
+    final orderId = order['id'] as String;
+    final status = order['status'] as String? ?? 'pending';
+    final totalPrice = (order['total'] as num?)?.toDouble() ?? 0;
+    final items = List<Map<String, dynamic>>.from(order['order_items'] as List<dynamic>? ?? []);
+    final qty = items.fold<int>(0, (sum, item) => sum + ((item['quantity'] as int?) ?? 0));
+    final itemNames = items.map((item) {
+      final product = item['products'] as Map<String, dynamic>?;
+      return product?['name'] as String? ?? 'Produce';
+    }).toList();
+
+    final (String statusLabel, Color statusColor) = switch (status.toLowerCase()) {
+      'confirmed' => ('Confirmed', ColorUtils.sageGreen),
+      'in_transit' || 'in transit' => ('In Transit', Colors.blue),
+      'delivered' => ('Delivered', ColorUtils.forestGreen),
+      'cancelled' => ('Cancelled', Colors.red),
+      _ => ('Pending', ColorUtils.terracotta),
+    };
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Order #${orderId.substring(0, 8).toUpperCase()}',
+                style: AppTypography.bodyMedium(fontWeight: FontWeight.bold, color: ColorUtils.darkText),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            itemNames.isNotEmpty ? itemNames.join(', ') : 'Produce items',
+            style: AppTypography.bodySmall(color: Colors.grey.shade600),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 12),
+          const Divider(),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$qty item${qty == 1 ? '' : 's'}',
+                style: AppTypography.bodySmall(color: Colors.grey.shade600),
+              ),
+              Text(
+                'PHP ${totalPrice.toStringAsFixed(0)}',
+                style: AppTypography.heading3(color: ColorUtils.forestGreen, fontSize: 16),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _showStatusDialog(order),
+              icon: const Icon(LucideIcons.refreshCw, size: 16),
+              label: const Text('Update Order Status'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: ColorUtils.forestGreen,
+                side: const BorderSide(color: ColorUtils.forestGreen),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
             ),
           ),
         ],

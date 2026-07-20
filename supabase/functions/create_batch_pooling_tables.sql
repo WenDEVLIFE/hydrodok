@@ -4,29 +4,43 @@
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.batch_pools (
-  id              uuid primary key default gen_random_uuid(),
-  title           text not null,
-  crop_name       text not null,
-  target_quantity numeric(12,2) not null default 0,
-  current_quantity numeric(12,2) not null default 0,
-  target_price    numeric(12,2) default 0,
-  status          text not null default 'Open',
-  created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now()
+  id              uuid primary key default gen_random_uuid()
 );
 
 -- Add missing columns if the table already existed without them.
+ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS title text not null default '';
+ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS crop_name text not null default '';
+ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS target_quantity numeric(12,2) not null default 0;
+ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS current_quantity numeric(12,2) not null default 0;
+ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS target_price numeric(12,2) default 0;
+ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS status text not null default 'Open';
+ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS created_at timestamptz not null default now();
+ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS updated_at timestamptz not null default now();
 ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS created_by uuid references auth.users(id) on delete set null;
 ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS deadline date;
 
 CREATE TABLE IF NOT EXISTS public.batch_members (
-  id          uuid primary key default gen_random_uuid(),
-  batch_id    uuid not null references public.batch_pools(id) on delete cascade,
-  farmer_id   uuid not null references auth.users(id) on delete cascade,
-  quantity    numeric(12,2) not null default 0,
-  created_at  timestamptz not null default now(),
-  unique(batch_id, farmer_id)
+  id          uuid primary key default gen_random_uuid()
 );
+
+ALTER TABLE public.batch_members ADD COLUMN IF NOT EXISTS batch_id uuid not null references public.batch_pools(id) on delete cascade;
+ALTER TABLE public.batch_members ADD COLUMN IF NOT EXISTS farmer_id uuid not null references auth.users(id) on delete cascade;
+ALTER TABLE public.batch_members ADD COLUMN IF NOT EXISTS quantity numeric(12,2) not null default 0;
+ALTER TABLE public.batch_members ADD COLUMN IF NOT EXISTS created_at timestamptz not null default now();
+
+-- Add unique constraint if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'batch_members_batch_id_farmer_id_key'
+      AND conrelid = 'public.batch_members'::regclass
+  ) THEN
+    ALTER TABLE public.batch_members
+      ADD CONSTRAINT batch_members_batch_id_farmer_id_key
+      UNIQUE (batch_id, farmer_id);
+  END IF;
+END $$;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_batch_pools_status ON public.batch_pools(status);

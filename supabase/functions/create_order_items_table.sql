@@ -57,20 +57,19 @@ CREATE POLICY "Buyers update own orders"
   ON public.orders FOR update
   USING (auth.uid() = buyer_id);
 
--- ── Add delivery_address column to orders if not present ─────────────────────
-ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS delivery_address text DEFAULT ''::text;
+-- ── Add order total column if not present (matches database.md) ─────────────
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS total numeric(10,2) DEFAULT 0;
 
 -- ── Atomic Order Creation Functions ───────────────────────────────────────────
 DROP FUNCTION IF EXISTS public.create_order_with_items(uuid, uuid, text, jsonb, text);
 DROP FUNCTION IF EXISTS public.create_order_with_items(uuid, uuid, text, jsonb);
 
--- 1. Main 5-parameter function
+-- Atomic order creation function (aligned with database.md)
 CREATE OR REPLACE FUNCTION public.create_order_with_items(
   p_buyer_id uuid,
   p_farmer_id uuid,
   p_status text,
-  p_items jsonb,
-  p_delivery_address text DEFAULT ''::text
+  p_items jsonb
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -81,16 +80,10 @@ DECLARE
   v_item jsonb;
   v_total numeric(10,2) := 0;
 BEGIN
-  -- Create the order header using `total` and `delivery_address`
-  BEGIN
-    INSERT INTO public.orders (buyer_id, farmer_id, status, total, delivery_address)
-    VALUES (p_buyer_id, p_farmer_id, p_status, 0, COALESCE(p_delivery_address, ''))
-    RETURNING id INTO v_order_id;
-  EXCEPTION WHEN undefined_column THEN
-    INSERT INTO public.orders (buyer_id, farmer_id, status, total)
-    VALUES (p_buyer_id, p_farmer_id, p_status, 0)
-    RETURNING id INTO v_order_id;
-  END;
+  -- Create the order header using only columns from database.md
+  INSERT INTO public.orders (buyer_id, farmer_id, status, total)
+  VALUES (p_buyer_id, p_farmer_id, p_status, 0)
+  RETURNING id INTO v_order_id;
 
   -- Insert items and calculate total
   FOR v_item IN SELECT jsonb_array_elements(p_items)
@@ -106,39 +99,15 @@ BEGIN
     v_total := v_total + (v_item->>'subtotal')::numeric;
   END LOOP;
 
-  -- Update order totals (set total, and total_price if column exists)
-  BEGIN
-    UPDATE public.orders
-    SET total = v_total, total_price = v_total
-    WHERE id = v_order_id;
-  EXCEPTION WHEN undefined_column THEN
-    UPDATE public.orders
-    SET total = v_total
-    WHERE id = v_order_id;
-  END;
+  -- Update order total
+  UPDATE public.orders
+  SET total = v_total
+  WHERE id = v_order_id;
 
   RETURN v_order_id;
 END;
 $$;
 
--- 2. Backwards-compatible 4-parameter overload function
-CREATE OR REPLACE FUNCTION public.create_order_with_items(
-  p_buyer_id uuid,
-  p_farmer_id uuid,
-  p_status text,
-  p_items jsonb
-)
-RETURNS uuid
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-  RETURN public.create_order_with_items(p_buyer_id, p_farmer_id, p_status, p_items, '');
-END;
-$$;
-
--- Grant permissions for both function signatures
-GRANT EXECUTE ON FUNCTION public.create_order_with_items(uuid, uuid, text, jsonb, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.create_order_with_items(uuid, uuid, text, jsonb, text) TO service_role;
+-- Grant permissions
 GRANT EXECUTE ON FUNCTION public.create_order_with_items(uuid, uuid, text, jsonb) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.create_order_with_items(uuid, uuid, text, jsonb) TO service_role;

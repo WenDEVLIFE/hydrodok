@@ -31,11 +31,14 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
   }
 
   void _showCreatePoolDialog() {
+    debugPrint('BatchPoolingScreen: opening create pool dialog');
     final cropController = TextEditingController();
     final weightController = TextEditingController();
     final priceController = TextEditingController();
 
     showModalBottomSheet(
+      useSafeArea: true,
+      isDismissible: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
@@ -258,7 +261,15 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
         iconTheme: const IconThemeData(color: ColorUtils.darkText),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showCreatePoolDialog,
+        onPressed: () {
+          debugPrint('BatchPoolingScreen: FAB pressed');
+          try {
+            _showCreatePoolDialog();
+          } catch (e, stack) {
+            debugPrint('BatchPoolingScreen: FAB error: $e');
+            debugPrint(stack.toString());
+          }
+        },
         backgroundColor: ColorUtils.forestGreen,
         icon: const Icon(LucideIcons.plus, color: Colors.white),
         label: const Text('Create Pool',
