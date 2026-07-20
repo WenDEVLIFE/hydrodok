@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/service/forum_service.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
-import '../../../widget/custom_button.dart';
+import '../../../widget/widgets.dart';
 
 /// Bottom-sheet dialog for creating a new forum post.
 class AddPostDialog extends StatefulWidget {
@@ -127,21 +127,10 @@ class _AddPostDialogState extends State<AddPostDialog> {
               }).toList(),
             ),
             const SizedBox(height: 16),
-            TextField(
+            CustomTextField(
+              label: 'Post Content',
+              hint: 'Share something with the community...',
               controller: _contentController,
-              maxLines: 5,
-              decoration: InputDecoration(
-                hintText: 'Share something with the community...',
-                hintStyle: AppTypography.bodyMedium(color: Colors.grey.shade400),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: Colors.grey.shade300),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: ColorUtils.forestGreen),
-                ),
-              ),
             ),
             const SizedBox(height: 24),
             SizedBox(

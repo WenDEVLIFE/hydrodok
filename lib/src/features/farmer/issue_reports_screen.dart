@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
+import '../../widget/widgets.dart';
 
 /// Screen for farmers to report hardware/system issues and view ticket status
 class IssueReportsScreen extends StatefulWidget {
@@ -96,7 +97,7 @@ class _IssueReportsScreenState extends State<IssueReportsScreen> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
-                  value: selectedCategory,
+                  initialValue: selectedCategory,
                   decoration: const InputDecoration(
                     labelText: 'Issue Category',
                     border: OutlineInputBorder(),
@@ -109,27 +110,20 @@ class _IssueReportsScreenState extends State<IssueReportsScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
-                TextField(
+                CustomTextField(
+                  label: 'Issue Title',
+                  hint: 'Brief summary of what happened',
                   controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Issue Title',
-                    hintText: 'Brief summary of what happened',
-                    border: OutlineInputBorder(),
-                  ),
                 ),
                 const SizedBox(height: 12),
-                TextField(
+                CustomTextField(
+                  label: 'Detailed Description',
+                  hint: 'Describe symptoms, affected equipment, or error codes...',
                   controller: descController,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Detailed Description',
-                    hintText: 'Describe symptoms, affected equipment, or error codes...',
-                    border: OutlineInputBorder(),
-                  ),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: selectedPriority,
+                  initialValue: selectedPriority,
                   decoration: const InputDecoration(
                     labelText: 'Priority Level',
                     border: OutlineInputBorder(),

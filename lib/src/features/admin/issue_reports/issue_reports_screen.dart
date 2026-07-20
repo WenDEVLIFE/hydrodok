@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
+import '../../../widget/widgets.dart';
 
 class IssueReportsScreen extends StatefulWidget {
   const IssueReportsScreen({super.key});

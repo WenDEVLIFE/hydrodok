@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/service/forum_service.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
+import '../../../widget/widgets.dart';
 
 /// Dialog for reporting a forum post.
 class ReportPostDialog extends StatefulWidget {
@@ -70,13 +70,10 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
             style: AppTypography.bodyMedium(color: Colors.grey.shade600),
           ),
           const SizedBox(height: 12),
-          TextField(
+          CustomTextField(
+            label: 'Reason for Report',
+            hint: 'e.g. Spam, harassment, misinformation...',
             controller: _reasonController,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              hintText: 'e.g. Spam, harassment, misinformation...',
-              border: OutlineInputBorder(),
-            ),
           ),
         ],
       ),
