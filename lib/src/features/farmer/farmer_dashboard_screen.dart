@@ -31,8 +31,10 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
 
   late final NutrientTaskRepository _nutrientTaskRepo;
 
-  // ── Realtime stream ─────────────────────────────────────────────────────
+  // ── Realtime streams ─────────────────────────────────────────────────────
   late final Stream<List<Map<String, dynamic>>> _farmStream;
+  late final Stream<List<Map<String, dynamic>>> _productsStream;
+  late final Stream<List<Map<String, dynamic>>> _ordersStream;
 
   // ── Products, Orders, Tasks & Nutrient Logs ─────────────────────────────
   List<Map<String, dynamic>> _myProducts = [];
@@ -52,11 +54,22 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
-    // Realtime stream: auto-updates when admin approves/rejects
-    _farmStream = Supabase.instance.client
+    final client = Supabase.instance.client;
+
+    _farmStream = client
         .from('farms')
         .stream(primaryKey: ['id'])
         .eq('owner_id', user.id);
+
+    _productsStream = client
+        .from('products')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false);
+
+    _ordersStream = client
+        .from('orders')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false);
   }
 
   Future<void> _loadProductsAndOrders() async {
@@ -362,47 +375,87 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      if (_myTasks.isEmpty) ...[
-                        _buildScheduleTile(
-                          time: '08:00 AM',
-                          title: 'Reservoir pH & EC Test',
-                          subtitle: 'Check water quality',
-                          isDone: true,
-                        ),
-                        _buildScheduleTile(
-                          time: '01:30 PM',
-                          title: 'Nutrient Solution Top-up',
-                          subtitle: 'Add Masterblend 4-18-38 Formula',
-                          isDone: false,
-                        ),
-                        _buildScheduleTile(
-                          time: '05:00 PM',
-                          title: 'End-of-Day Inspection',
-                          subtitle: 'Walk through and check all systems',
-                          isDone: false,
-                        ),
-                      ] else
-                        ..._myTasks.map((t) {
-                          final taskId = t['id'] as String;
-                          final farmId = farm?['id'] as String?;
-                          final title = t['title'] as String? ?? 'Task';
-                          final desc = t['description'] as String? ?? '';
-                          final isCompleted = t['status'] == 'completed';
-                          final priority = t['priority'] as String? ?? 'medium';
-
-                          return _buildScheduleTile(
-                            time: '',
-                            title: title,
-                            subtitle: desc,
-                            isDone: isCompleted,
-                            priority: priority,
-                            onToggle: () async {
-                              final nextStatus = isCompleted ? 'pending' : 'completed';
-                              await _nutrientTaskRepo.updateTaskStatus(taskId, nextStatus);
-                              if (farmId != null) _loadTasksAndLogs(farmId);
+                      // ── Tasks ───────────────────────────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Tasks',
+                            style: AppTypography.heading3(
+                              color: ColorUtils.darkText,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () {
+                              final farmId = farm?['id'] as String?;
+                              if (farmId != null) _showAddTaskDialog(farmId);
                             },
+                            icon: const Icon(LucideIcons.plus, size: 16),
+                            label: const Text('Add Task'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: ColorUtils.forestGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: (farm?['id'] as String?) != null
+                            ? _nutrientTaskRepo.watchFarmTasks(farm!['id'] as String)
+                            : null,
+                        builder: (context, taskSnapshot) {
+                          final tasksList = taskSnapshot.data ?? _myTasks;
+                          if (tasksList.isEmpty) {
+                            return Column(
+                              children: [
+                                _buildScheduleTile(
+                                  time: '08:00 AM',
+                                  title: 'Reservoir pH & EC Test',
+                                  subtitle: 'Check water quality',
+                                  isDone: true,
+                                ),
+                                _buildScheduleTile(
+                                  time: '01:30 PM',
+                                  title: 'Nutrient Solution Top-up',
+                                  subtitle: 'Add Masterblend 4-18-38 Formula',
+                                  isDone: false,
+                                ),
+                                _buildScheduleTile(
+                                  time: '05:00 PM',
+                                  title: 'End-of-Day Inspection',
+                                  subtitle: 'Walk through and check all systems',
+                                  isDone: false,
+                                ),
+                              ],
+                            );
+                          }
+
+                          return Column(
+                            children: tasksList.map((t) {
+                              final taskId = t['id'] as String;
+                              final farmId = farm?['id'] as String?;
+                              final title = t['title'] as String? ?? 'Task';
+                              final desc = t['description'] as String? ?? '';
+                              final isCompleted = t['status'] == 'completed';
+                              final priority = t['priority'] as String? ?? 'medium';
+
+                              return _buildScheduleTile(
+                                time: '',
+                                title: title,
+                                subtitle: desc,
+                                isDone: isCompleted,
+                                priority: priority,
+                                onToggle: () async {
+                                  final nextStatus = isCompleted ? 'pending' : 'completed';
+                                  await _nutrientTaskRepo.updateTaskStatus(taskId, nextStatus);
+                                  if (farmId != null) _loadTasksAndLogs(farmId);
+                                },
+                              );
+                            }).toList(),
                           );
-                        }),
+                        },
+                      ),
                       const SizedBox(height: 28),
 
                       // ── Nutrient Logs ─────────────────────────────────────────
@@ -430,79 +483,90 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      if (_myNutrientLogs.isEmpty)
-                        _buildEmptyState('No nutrient logs recorded yet. Tap "Log Nutrient" to record one.')
-                      else
-                        ..._myNutrientLogs.map((log) {
-                          final nutrientName = log['nutrient_name'] as String? ?? 'Nutrient';
-                          final amount = (log['amount'] as num?)?.toDouble() ?? 0;
-                          final notes = log['notes'] as String? ?? '';
+                      StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: (farm?['id'] as String?) != null
+                            ? _nutrientTaskRepo.watchNutrientLogs(farm!['id'] as String)
+                            : null,
+                        builder: (context, logsSnapshot) {
+                          final logsList = logsSnapshot.data ?? _myNutrientLogs;
+                          if (logsList.isEmpty) {
+                            return _buildEmptyState('No nutrient logs recorded yet. Tap "Log Nutrient" to record one.');
+                          }
 
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: Colors.grey.shade200),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.04),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
+                          return Column(
+                            children: logsList.map((log) {
+                              final nutrientName = log['nutrient_name'] as String? ?? 'Nutrient';
+                              final amount = (log['amount'] as num?)?.toDouble() ?? 0;
+                              final notes = log['notes'] as String? ?? '';
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.04),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: ColorUtils.forestGreen.withValues(alpha: 0.1),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(LucideIcons.droplets, color: ColorUtils.forestGreen, size: 20),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        nutrientName,
-                                        style: AppTypography.bodyMedium(
-                                          color: ColorUtils.darkText,
-                                          fontWeight: FontWeight.w600,
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: ColorUtils.forestGreen.withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(LucideIcons.droplets, color: ColorUtils.forestGreen, size: 20),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            nutrientName,
+                                            style: AppTypography.bodyMedium(
+                                              color: ColorUtils.darkText,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          if (notes.isNotEmpty) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              notes,
+                                              style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: ColorUtils.forestGreen.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '${amount % 1 == 0 ? amount.toInt() : amount} g/ml',
+                                        style: AppTypography.bodySmall(
+                                          color: ColorUtils.forestGreen,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      if (notes.isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          notes,
-                                          style: AppTypography.bodySmall(color: Colors.grey.shade600),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: ColorUtils.forestGreen.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    '${amount % 1 == 0 ? amount.toInt() : amount} g/ml',
-                                    style: AppTypography.bodySmall(
-                                      color: ColorUtils.forestGreen,
-                                      fontWeight: FontWeight.bold,
                                     ),
-                                  ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              );
+                            }).toList(),
                           );
-                        }),
+                        },
+                      ),
                       const SizedBox(height: 32),
 
                       // ── My Products ──────────────────────────────────────────
@@ -527,10 +591,32 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      if (_myProducts.isEmpty)
-                        _buildEmptyState('No products yet. Tap "Add" to create one.')
-                      else
-                        ..._myProducts.map((p) => _buildProductCard(p)),
+                      StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: _productsStream,
+                        builder: (context, prodSnapshot) {
+                          final user = Supabase.instance.client.auth.currentUser;
+                          final farmId = farm?['id'] as String?;
+
+                          final rawStream = prodSnapshot.data ?? [];
+                          final filtered = rawStream.where((p) {
+                            if (user != null && p['farmer_id'] == user.id) return true;
+                            if (farmId != null && p['farm_id'] == farmId) return true;
+                            return false;
+                          }).toList();
+
+                          final productsList = filtered.isNotEmpty
+                              ? filtered
+                              : (rawStream.isNotEmpty ? rawStream : _myProducts);
+
+                          if (productsList.isEmpty) {
+                            return _buildEmptyState('No products yet. Tap "Add" to create one.');
+                          }
+
+                          return Column(
+                            children: productsList.map((p) => _buildProductCard(p)).toList(),
+                          );
+                        },
+                      ),
                       const SizedBox(height: 24),
 
                       // ── Incoming Orders ─────────────────────────────────────
@@ -542,10 +628,29 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      if (_myOrders.isEmpty)
-                        _buildEmptyState('No orders yet.')
-                      else
-                        ..._myOrders.map((o) => _buildOrderCard(o)),
+                      StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: _ordersStream,
+                        builder: (context, orderSnapshot) {
+                          final user = Supabase.instance.client.auth.currentUser;
+                          final rawStream = orderSnapshot.data ?? [];
+                          final filtered = rawStream.where((o) {
+                            if (user != null && o['farmer_id'] == user.id) return true;
+                            return false;
+                          }).toList();
+
+                          final ordersList = filtered.isNotEmpty
+                              ? filtered
+                              : (rawStream.isNotEmpty ? rawStream : _myOrders);
+
+                          if (ordersList.isEmpty) {
+                            return _buildEmptyState('No orders yet.');
+                          }
+
+                          return Column(
+                            children: ordersList.map((o) => _buildOrderCard(o)).toList(),
+                          );
+                        },
+                      ),
                       const SizedBox(height: 32),
                     ],
                   ),

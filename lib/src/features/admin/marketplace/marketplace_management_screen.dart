@@ -272,26 +272,49 @@ class _MarketplaceManagementScreenState
 
           // ── Products List ───────────────────────────────────────────────
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _products.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(LucideIcons.package, size: 48, color: Colors.grey),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No $_activeFilter products',
-                              style: AppTypography.bodyLarge(color: Colors.grey.shade600),
-                            ),
-                          ],
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: Supabase.instance.client
+                  .from('products')
+                  .stream(primaryKey: ['id'])
+                  .order('created_at', ascending: false),
+              builder: (context, snapshot) {
+                final raw = snapshot.data ?? [];
+                final list = raw.isNotEmpty ? raw : _products;
+
+                final filtered = list.where((p) {
+                  final status = (p['status'] as String? ?? 'pending').toLowerCase();
+                  if (_activeFilter == 'Pending') return status == 'pending';
+                  if (_activeFilter == 'Approved') return status == 'approved' || status == 'active';
+                  if (_activeFilter == 'Rejected') return status == 'rejected';
+                  return true;
+                }).toList();
+
+                if (_isLoading && snapshot.connectionState == ConnectionState.waiting && list.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (filtered.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(LucideIcons.package, size: 48, color: Colors.grey),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No $_activeFilter products',
+                          style: AppTypography.bodyLarge(color: Colors.grey.shade600),
                         ),
-                      )
-                    : ListView.builder(
-                        itemCount: _products.length,
-                        itemBuilder: (ctx, index) => _buildProductCard(_products[index]),
-                      ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (ctx, index) => _buildProductCard(filtered[index]),
+                );
+              },
+            ),
           ),
         ],
       ),

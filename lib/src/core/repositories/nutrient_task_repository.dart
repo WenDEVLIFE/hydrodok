@@ -18,6 +18,9 @@ abstract class NutrientTaskRepository {
   /// Fetches all nutrient logs for a farm.
   Future<List<Map<String, dynamic>>> getNutrientLogs(String farmId);
 
+  /// Streams nutrient logs for a farm in real time.
+  Stream<List<Map<String, dynamic>>> watchNutrientLogs(String farmId);
+
   /// Adds a new farm task.
   Future<Map<String, dynamic>> addTask({
     required String farmId,
@@ -35,6 +38,9 @@ abstract class NutrientTaskRepository {
 
   /// Fetches all tasks for a farm.
   Future<List<Map<String, dynamic>>> getFarmTasks(String farmId);
+
+  /// Streams farm tasks for a farm in real time.
+  Stream<List<Map<String, dynamic>>> watchFarmTasks(String farmId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -73,6 +79,11 @@ class SupabaseNutrientTaskRepository implements NutrientTaskRepository {
   }
 
   @override
+  Stream<List<Map<String, dynamic>>> watchNutrientLogs(String farmId) {
+    return _service.watchNutrientLogs(farmId);
+  }
+
+  @override
   Future<Map<String, dynamic>> addTask({
     required String farmId,
     required String title,
@@ -102,5 +113,10 @@ class SupabaseNutrientTaskRepository implements NutrientTaskRepository {
   @override
   Future<List<Map<String, dynamic>>> getFarmTasks(String farmId) {
     return _service.getFarmTasks(farmId);
+  }
+
+  @override
+  Stream<List<Map<String, dynamic>>> watchFarmTasks(String farmId) {
+    return _service.watchFarmTasks(farmId);
   }
 }

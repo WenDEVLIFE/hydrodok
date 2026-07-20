@@ -58,7 +58,25 @@ class NutrientTaskService {
     }
   }
 
+  /// Realtime stream of nutrient logs for a [farmId].
+  Stream<List<Map<String, dynamic>>> watchNutrientLogs(String farmId) {
+    return _supabase
+        .from('nutrient_logs')
+        .stream(primaryKey: ['id'])
+        .eq('farm_id', farmId)
+        .order('created_at', ascending: false);
+  }
+
   // ── Farm Tasks ─────────────────────────────────────────────────────────────
+
+  /// Realtime stream of tasks for a [farmId].
+  Stream<List<Map<String, dynamic>>> watchFarmTasks(String farmId) {
+    return _supabase
+        .from('farm_tasks')
+        .stream(primaryKey: ['id'])
+        .eq('farm_id', farmId)
+        .order('created_at', ascending: false);
+  }
 
   /// Creates a new maintenance task for a [farmId].
   Future<Map<String, dynamic>> addTask({
