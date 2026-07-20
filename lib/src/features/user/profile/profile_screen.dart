@@ -11,6 +11,12 @@ import '../../../core/repositories/auth_repository.dart';
 import '../../../core/repositories/farm_repository.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
+import '../../farmer/batch_pooling_screen.dart';
+import '../../farmer/farm_listing_screen.dart';
+import '../../farmer/farm_settings_screen.dart';
+import '../../farmer/farmer_orders_screen.dart';
+import '../../farmer/farmer_requests_screen.dart';
+import '../../farmer/issue_reports_screen.dart';
 import '../../login/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -272,28 +278,77 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                       // ── Menu items ────────────────────────────────
                       _buildMenuItem(
-                        title: _isFarmer ? 'My Farm Listings' : 'My Orders',
-                        subtitle: _isFarmer ? '3 products listed' : '12 orders',
+                        title: _isFarmer ? 'My Farm Listing' : 'My Orders',
+                        subtitle: _isFarmer ? 'View farm profile, coordinates & listed produce' : 'Track ongoing purchases',
+                        icon: _isFarmer ? LucideIcons.sprout : LucideIcons.shoppingBag,
+                        onTap: () {
+                          if (_isFarmer) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const FarmListingScreen()),
+                            );
+                          } else {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const FarmerOrdersScreen()),
+                            );
+                          }
+                        },
                       ),
                       const SizedBox(height: 10),
                       _buildMenuItem(
                         title: 'Batch Pooling Requests',
-                        subtitle: '1 active request',
+                        subtitle: 'Collective farmer produce pooling',
+                        icon: LucideIcons.users,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const BatchPoolingScreen()),
+                          );
+                        },
                       ),
                       const SizedBox(height: 10),
+                      if (_isFarmer) ...[
+                        _buildMenuItem(
+                          title: 'Buyer Crop Requests',
+                          subtitle: 'View bulk crop requests & submit quotes',
+                          icon: LucideIcons.inbox,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const FarmerRequestsScreen()),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        _buildMenuItem(
+                          title: 'Customer Orders',
+                          subtitle: 'Manage order fulfillment & status',
+                          icon: LucideIcons.shoppingBag,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const FarmerOrdersScreen()),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                      ],
                       _buildMenuItem(
                         title: 'Issue Reports',
-                        subtitle: 'Report a problem to Admin',
-                      ),
-                      const SizedBox(height: 10),
-                      _buildMenuItem(
-                        title: 'Order History',
-                        subtitle: '128 completed orders',
+                        subtitle: 'Report a system or technical problem',
+                        icon: LucideIcons.alertTriangle,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const IssueReportsScreen()),
+                          );
+                        },
                       ),
                       const SizedBox(height: 10),
                       _buildMenuItem(
                         title: 'Settings',
-                        subtitle: 'Notifications, privacy, help',
+                        subtitle: 'Notifications, farm status & payout details',
+                        icon: LucideIcons.settings,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const FarmSettingsScreen()),
+                          );
+                        },
                       ),
                       const SizedBox(height: 20),
 
@@ -590,27 +645,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildMenuItem({required String title, required String subtitle}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: AppTypography.subtitle2(color: ColorUtils.darkText, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 2),
-              Text(subtitle, style: AppTypography.caption(color: Colors.grey.shade600)),
+  Widget _buildMenuItem({
+    required String title,
+    required String subtitle,
+    IconData? icon,
+    VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 20, color: ColorUtils.forestGreen),
+              const SizedBox(width: 14),
             ],
-          ),
-          const Icon(LucideIcons.chevronRight, size: 18, color: Colors.grey),
-        ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTypography.subtitle2(color: ColorUtils.darkText, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: AppTypography.caption(color: Colors.grey.shade600)),
+                ],
+              ),
+            ),
+            const Icon(LucideIcons.chevronRight, size: 18, color: Colors.grey),
+          ],
+        ),
       ),
     );
   }
