@@ -116,7 +116,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
               label,
               style: TextStyle(
                 fontWeight: current == value ? FontWeight.bold : FontWeight.normal,
-                color: ColorUtils.darkText,
+                color: ColorUtils.pureWhite,
               ),
             ),
           ],
@@ -330,7 +330,7 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
       label: Text(label),
       selectedColor: ColorUtils.forestGreen,
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : ColorUtils.darkText,
+        color: isSelected ? Colors.white : ColorUtils.pureWhite,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
       onSelected: (_) => setState(() => _selectedFilter = label),
