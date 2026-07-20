@@ -23,6 +23,7 @@ SET search_path = ''
 AS $$
 DECLARE
   v_user_id uuid;
+  v_identity_id uuid;
   v_instance_id uuid;
 BEGIN
   -- Only existing admins can call this function
@@ -30,8 +31,9 @@ BEGIN
     RAISE EXCEPTION 'Only admins can create admin users';
   END IF;
 
-  -- Generate a fresh user id
+  -- Generate fresh UUIDs
   v_user_id := extensions.uuid_generate_v4();
+  v_identity_id := extensions.uuid_generate_v4();
 
   -- Fetch instance_id from existing auth.users or default
   SELECT instance_id INTO v_instance_id FROM auth.users LIMIT 1;
@@ -39,7 +41,7 @@ BEGIN
     v_instance_id := '00000000-0000-0000-0000-000000000000'::uuid;
   END IF;
 
-  -- 1. Insert into auth.users (email_confirmed_at automatically satisfies confirmed_at)
+  -- 1. Insert into auth.users (email_confirmed_at automatically populates generated confirmed_at)
   INSERT INTO auth.users (
     instance_id,
     id,
@@ -72,22 +74,22 @@ BEGIN
   BEGIN
     INSERT INTO auth.identities (
       id,
+      provider_id,
       user_id,
       identity_data,
       provider,
       last_sign_in_at,
       created_at,
-      updated_at,
-      provider_id
+      updated_at
     ) VALUES (
+      v_identity_id,
+      lower(email),
       v_user_id,
-      v_user_id,
-      jsonb_build_object('sub', v_user_id::text, 'email', lower(email)),
+      jsonb_build_object('sub', v_user_id::text, 'email', lower(email), 'email_verified', true),
       'email',
       now(),
       now(),
-      now(),
-      v_user_id::text
+      now()
     );
   EXCEPTION WHEN OTHERS THEN
     INSERT INTO auth.identities (
@@ -99,9 +101,9 @@ BEGIN
       created_at,
       updated_at
     ) VALUES (
+      v_identity_id,
       v_user_id,
-      v_user_id,
-      jsonb_build_object('sub', v_user_id::text, 'email', lower(email)),
+      jsonb_build_object('sub', v_user_id::text, 'email', lower(email), 'email_verified', true),
       'email',
       now(),
       now(),
