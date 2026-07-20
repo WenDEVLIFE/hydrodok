@@ -6,7 +6,7 @@
 CREATE TABLE IF NOT EXISTS public.farm_reviews (
   id          uuid primary key default gen_random_uuid(),
   farm_id     uuid not null references public.farms(id) on delete cascade,
-  user_id     uuid not null references auth.users(id) on delete cascade,
+  user_id     uuid not null references public.profiles(id) on delete cascade,
   rating      integer not null check (rating >= 1 and rating <= 5),
   comment     text default '',
   created_at  timestamptz not null default now()
