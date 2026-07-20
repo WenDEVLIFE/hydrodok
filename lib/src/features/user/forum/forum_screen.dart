@@ -229,8 +229,9 @@ class _PostCardState extends State<_PostCard> {
   }
 
   Future<Map<String, dynamic>?> _loadProfile() async {
+    // First try the embedded join (only present on REST, not realtime stream)
     final embedded = widget.post['profiles'];
-    if (embedded is Map<String, dynamic>) {
+    if (embedded is Map<String, dynamic> && embedded['full_name'] != null) {
       return embedded;
     }
 
@@ -238,11 +239,12 @@ class _PostCardState extends State<_PostCard> {
     if (userId == null || userId.toString().isEmpty) return null;
 
     try {
-      return await Supabase.instance.client
+      final result = await Supabase.instance.client
           .from('profiles')
           .select('full_name, role, avatar_url')
           .eq('id', userId)
           .maybeSingle();
+      return result;
     } catch (_) {
       return null;
     }
@@ -254,17 +256,14 @@ class _PostCardState extends State<_PostCard> {
     final content = widget.post['content'] as String? ?? '';
     final category = widget.post['category'] as String? ?? 'selling';
     final createdAt = widget.post['created_at'] as String? ?? '';
-    final likesCount = (widget.post['likes_count'] as num?)?.toInt() ?? 0;
     final commentsCount = (widget.post['comments_count'] as num?)?.toInt() ?? 0;
 
     return FutureBuilder<Map<String, dynamic>?>(
       future: _profileFuture,
       builder: (context, profileSnapshot) {
         final profile = profileSnapshot.data;
-        final authorName =
-            (profile?['full_name'] as String?)?.trim().isNotEmpty == true
-            ? profile!['full_name'] as String
-            : 'Unknown';
+        final rawName = (profile?['full_name'] as String?)?.trim() ?? '';
+        final authorName = rawName.isNotEmpty ? rawName : 'Farmer';
         final rawRole = (profile?['role'] as String?) ?? 'member';
         final role = _capitalize(rawRole);
         final avatarUrl = (profile?['avatar_url'] as String?) ?? '';
@@ -339,7 +338,6 @@ class _PostCardState extends State<_PostCard> {
                       _LikeButton(
                         key: ValueKey('like-$postId'),
                         postId: postId,
-                        likesCount: likesCount,
                       ),
                       const SizedBox(width: 16),
                       _ActionButton(
@@ -494,12 +492,10 @@ class _PostCardState extends State<_PostCard> {
 
 class _LikeButton extends StatefulWidget {
   final String postId;
-  final int likesCount;
 
   const _LikeButton({
     required Key key,
     required this.postId,
-    required this.likesCount,
   }) : super(key: key);
 
   @override
@@ -508,29 +504,34 @@ class _LikeButton extends StatefulWidget {
 
 class _LikeButtonState extends State<_LikeButton> {
   bool? _isLiked;
-  late int _likesCount;
+  int _likesCount = 0;
 
   final _service = ForumService(supabase: Supabase.instance.client);
 
   @override
   void initState() {
     super.initState();
-    _likesCount = widget.likesCount;
-    _loadInitialLikeState();
+    _loadInitialState();
   }
 
-  @override
-  void didUpdateWidget(covariant _LikeButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.likesCount != widget.likesCount) {
-      setState(() => _likesCount = widget.likesCount);
-    }
-  }
-
-  Future<void> _loadInitialLikeState() async {
+  Future<void> _loadInitialState() async {
     try {
+      // Load actual likes count from forum_likes table
+      final countRes = await Supabase.instance.client
+          .from('forum_likes')
+          .select('id')
+          .eq('post_id', widget.postId);
+      final count = (countRes as List).length;
+
+      // Load whether current user liked it
       final liked = await _service.isLiked(widget.postId);
-      if (mounted) setState(() => _isLiked = liked);
+
+      if (mounted) {
+        setState(() {
+          _likesCount = count;
+          _isLiked = liked;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _isLiked = false);
     }

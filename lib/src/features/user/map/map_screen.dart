@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/models/farm.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
+import 'farm_detail_screen.dart';
 
 /// Mock farms — fallback when live database has no verified farms.
 final _mockFarms = <Farm>[
@@ -63,6 +64,7 @@ class _MapScreenState extends State<MapScreen> {
   Farm? _selectedFarm;
   LatLng? _userLocation;
   List<Farm> _farmsList = _mockFarms;
+  List<Map<String, dynamic>> _rawFarmMaps = [];
 
   // Realtime stream for verified farms
   late final Stream<List<Map<String, dynamic>>> _farmsStream;
@@ -79,7 +81,7 @@ class _MapScreenState extends State<MapScreen> {
     _farmsStream = Supabase.instance.client
         .from('farms')
         .stream(primaryKey: ['id'])
-        .eq('verification_status', 'verified');
+        .map((rows) => rows.where((r) => r['verification_status'] == 'verified').toList());
   }
 
   Future<void> _determinePosition() async {
@@ -107,12 +109,41 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _onMarkerTapped(Farm farm) {
+  void _onMarkerTapped(Farm farm) async {
     setState(() => _selectedFarm = farm);
     _mapController.move(
       LatLng(farm.latitude, farm.longitude),
       _mapController.camera.zoom,
     );
+
+    // Fetch the full farm row to ensure owner_id and all fields are present.
+    Map<String, dynamic> rawFarm = _rawFarmMaps.firstWhere(
+      (r) => r['id'] == farm.id,
+      orElse: () => <String, dynamic>{},
+    );
+
+    if (rawFarm.isEmpty || rawFarm['owner_id'] == null) {
+      try {
+        final response = await Supabase.instance.client
+            .from('farms')
+            .select('*')
+            .eq('id', farm.id)
+            .maybeSingle();
+        if (response != null) rawFarm = response;
+      } catch (e) {
+        debugPrint('Failed to fetch full farm data: $e');
+      }
+    }
+
+    if (rawFarm.isEmpty) return;
+
+    if (mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => FarmDetailScreen(farm: rawFarm),
+        ),
+      );
+    }
   }
 
   @override
@@ -165,7 +196,8 @@ class _MapScreenState extends State<MapScreen> {
                   builder: (context, snapshot) {
                     // Update farms list from realtime stream
                     if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                      final liveFarms = snapshot.data!.map((data) {
+                      final rows = snapshot.data!;
+                      final liveFarms = rows.map((data) {
                         final lat = (data['latitude'] as num?)?.toDouble() ?? 14.5995;
                         final lng = (data['longitude'] as num?)?.toDouble() ?? 120.9842;
                         final name = data['farm_name'] as String? ?? 'Verified Hydro Farm';
@@ -188,7 +220,12 @@ class _MapScreenState extends State<MapScreen> {
                       }).toList();
 
                       WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) setState(() => _farmsList = liveFarms);
+                        if (mounted) {
+                          setState(() {
+                            _farmsList = liveFarms;
+                            _rawFarmMaps = rows;
+                          });
+                        }
                       });
                     }
 
@@ -214,18 +251,9 @@ class _MapScreenState extends State<MapScreen> {
                         // Zoom controls
                         Positioned(
                           right: 16,
-                          bottom: _selectedFarm != null ? 180 : 24,
+                          bottom: 24,
                           child: _buildZoomControls(),
                         ),
-
-                        // Selected-farm info card
-                        if (_selectedFarm != null)
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: _buildFarmCard(_selectedFarm!),
-                          ),
                       ],
                     );
                   },
@@ -452,143 +480,6 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  // ── Farm info card ─────────────────────────────────────────────────────────
-
-  Widget _buildFarmCard(Farm farm) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Farm name row
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: ColorUtils.forestGreen.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Icon(
-                  LucideIcons.diamond,
-                  color: ColorUtils.forestGreen,
-                  size: 16,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  farm.name,
-                  style: AppTypography.subtitle1(
-                    color: ColorUtils.darkText,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Product + rating
-          Row(
-            children: [
-              Text(
-                farm.product,
-                style: AppTypography.bodyMedium(
-                  color: ColorUtils.darkText,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${farm.rating}',
-                style: AppTypography.bodySmall(
-                  color: Colors.grey.shade600,
-                ),
-              ),
-              const SizedBox(width: 2),
-              Text(
-                '(${farm.reviewCount})',
-                style: AppTypography.bodySmall(
-                  color: Colors.grey.shade500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Stock + price + CTA
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${_formatNumber(farm.unitsInStock)} units in stock',
-                      style: AppTypography.bodySmall(
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'PHP ${farm.pricePerKg.toStringAsFixed(0)} / kg',
-                      style: AppTypography.subtitle1(
-                        color: ColorUtils.forestGreen,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  // TODO: navigate to farm detail
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: ColorUtils.forestGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  elevation: 0,
-                ),
-                child: Text(
-                  'View Farm',
-                  style: AppTypography.button(
-                    color: Colors.white,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatNumber(int n) {
-    if (n >= 1000) {
-      return '${(n / 1000).toStringAsFixed(n % 1000 == 0 ? 0 : 1)},000';
-    }
-    return n.toString();
-  }
 }
 
 /// Paints a small downward triangle beneath the marker circle.
