@@ -30,11 +30,39 @@ class _FarmListingScreenState extends State<FarmListingScreen> {
 
   late final FarmService _farmService;
 
+  Map<String, dynamic>? _initialFarm;
+  bool _isFarmLoading = true;
+
   @override
   void initState() {
     super.initState();
     _farmService = FarmService(supabase: Supabase.instance.client);
     _initStreams();
+    _loadInitialFarm();
+  }
+
+  Future<void> _loadInitialFarm() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isFarmLoading = false);
+      return;
+    }
+
+    try {
+      final farm = await _farmService.getFarmByOwnerId(user.id);
+      if (mounted) {
+        setState(() {
+          _initialFarm = farm;
+          _isFarmLoading = false;
+        });
+        if (farm != null) {
+          final farmId = farm['id'] as String?;
+          if (farmId != null) _loadFarmImages(farmId);
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isFarmLoading = false);
+    }
   }
 
   void _initStreams() {
@@ -268,11 +296,14 @@ class _FarmListingScreenState extends State<FarmListingScreen> {
       body: StreamBuilder<List<Map<String, dynamic>>>(
         stream: _farmStream,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if ((snapshot.connectionState == ConnectionState.waiting || _isFarmLoading) &&
+              _initialFarm == null) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final farm = snapshot.data?.isNotEmpty == true ? snapshot.data!.first : null;
+          final farm = (snapshot.data?.isNotEmpty == true
+              ? snapshot.data!.first
+              : null) ?? _initialFarm;
 
           if (farm == null) {
             return Center(
