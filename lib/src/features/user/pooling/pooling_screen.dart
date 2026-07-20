@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -15,40 +17,38 @@ class PoolingScreen extends StatefulWidget {
 }
 
 class _PoolingScreenState extends State<PoolingScreen> {
-  bool _isLoading = true;
-  List<Map<String, dynamic>> _batchPools = [];
+  late Future<List<Map<String, dynamic>>> _poolsFuture;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadPools();
+    _poolsFuture = _loadPools();
+    // Auto-refresh every 10 seconds as a fallback when Realtime is disabled.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _reloadPools());
   }
 
-  Future<void> _loadPools() async {
-    setState(() => _isLoading = true);
-    try {
-      final response = await Supabase.instance.client
-          .from('batch_pools')
-          .select('*, batch_members(*)')
-          .order('created_at', ascending: false);
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
-      final pools = List<Map<String, dynamic>>.from(response);
-      if (mounted) {
-        setState(() {
-          _batchPools = pools;
-          _isLoading = false;
-        });
-      }
-    } catch (e, stack) {
-      debugPrint('PoolingScreen load error: $e');
-      debugPrint(stack.toString());
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load pooling campaigns: $e')),
-        );
-      }
-    }
+  Future<List<Map<String, dynamic>>> _loadPools() async {
+    final response = await Supabase.instance.client
+        .from('batch_pools')
+        .select('*, batch_members(*)')
+        .order('created_at', ascending: false);
+
+    final pools = List<Map<String, dynamic>>.from(response);
+    debugPrint('PoolingScreen loaded ${pools.length} pools');
+    return pools;
+  }
+
+  void _reloadPools() {
+    setState(() {
+      _poolsFuture = _loadPools();
+    });
   }
 
   @override
@@ -63,85 +63,107 @@ class _PoolingScreenState extends State<PoolingScreen> {
       child: Scaffold(
         body: SafeArea(
           bottom: false,
-          child: RefreshIndicator(
-            onRefresh: _loadPools,
-            child: CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Batch Pooling',
-                          style: AppTypography.heading3(
-                            color: ColorUtils.darkText,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        _buildInfoBanner(),
-                        const SizedBox(height: 24),
-                        Text(
-                          'Active Pooling Campaigns',
-                          style: AppTypography.subtitle1(
-                            color: ColorUtils.darkText,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                    ),
-                  ),
-                ),
+          child: FutureBuilder<List<Map<String, dynamic>>>(
+            future: _poolsFuture,
+            builder: (context, snapshot) {
+              final batchPools = snapshot.data ?? [];
+              debugPrint('PoolingScreen pools: ${batchPools.length}, state: ${snapshot.connectionState}, error: ${snapshot.error}');
 
-                if (_isLoading)
-                  const SliverFillRemaining(
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (_batchPools.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(LucideIcons.users, size: 48, color: Colors.grey.shade400),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No active pooling campaigns',
-                            style: AppTypography.bodyLarge(
-                              color: Colors.grey.shade600,
-                              fontWeight: FontWeight.w600,
+              return RefreshIndicator(
+                onRefresh: () async => _reloadPools(),
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Batch Pooling',
+                              style: AppTypography.heading3(
+                                color: ColorUtils.darkText,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildInfoBanner(),
+                            const SizedBox(height: 24),
+                            Text(
+                              'Active Pooling Campaigns',
+                              style: AppTypography.subtitle1(
+                                color: ColorUtils.darkText,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    if (snapshot.connectionState == ConnectionState.waiting && batchPools.isEmpty)
+                      const SliverFillRemaining(
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (snapshot.hasError)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Text(
+                              'Error loading pools: ${snapshot.error}',
+                              style: AppTypography.bodySmall(color: Colors.redAccent),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Farmers can create pools from the farmer dashboard.',
-                            style: AppTypography.bodySmall(color: Colors.grey.shade500),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) => Padding(
-                          padding: EdgeInsets.only(
-                            bottom: index < _batchPools.length - 1 ? 12 : 0,
-                          ),
-                          child: _PoolCard(pool: _batchPools[index]),
                         ),
-                        childCount: _batchPools.length,
+                      )
+                    else if (batchPools.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(LucideIcons.users, size: 48, color: Colors.grey.shade400),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No active pooling campaigns',
+                                style: AppTypography.bodyLarge(
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Farmers can create pools from the farmer dashboard.',
+                                style: AppTypography.bodySmall(color: Colors.grey.shade500),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) => Padding(
+                              padding: EdgeInsets.only(
+                                bottom: index < batchPools.length - 1 ? 12 : 0,
+                              ),
+                              child: _PoolCard(pool: batchPools[index]),
+                            ),
+                            childCount: batchPools.length,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-              ],
-            ),
+                  ],
+                ),
+              );
+            },
           ),
         ),
       ),
