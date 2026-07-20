@@ -79,6 +79,7 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
     final titleController = TextEditingController();
     final contentController = TextEditingController();
     final ctaController = TextEditingController(text: 'Learn More');
+    final urlController = TextEditingController();
     String status = 'live';
 
     final result = await showDialog<bool>(
@@ -115,7 +116,16 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
                     controller: ctaController,
                     decoration: const InputDecoration(
                       labelText: 'Button Label',
-                      hintText: 'Learn More',
+                      hintText: 'e.g. Learn More / Watch Video / Join Stream',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: urlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Redirect URL / Link (YouTube, Zoom, Meet, etc.)',
+                      hintText: 'e.g. https://youtube.com/... or https://zoom.us/j/...',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -165,6 +175,7 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
                     'cta_label': ctaController.text.trim().isEmpty
                         ? 'Learn More'
                         : ctaController.text.trim(),
+                    'cta_url': urlController.text.trim(),
                     'status': status,
                     'created_by': user?.id,
                   });

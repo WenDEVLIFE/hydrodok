@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/utils/color_utils.dart';
 import '../core/utils/typography.dart';
@@ -210,10 +211,23 @@ class _DismissibleBannerStackState extends State<_DismissibleBannerStack> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    // For now, just dismiss. Could open ctaUrl if provided.
+                  onPressed: () async {
                     if (ctaUrl.isNotEmpty) {
-                      // TODO: launch URL
+                      String formattedUrl = ctaUrl.trim();
+                      if (!formattedUrl.startsWith('http://') &&
+                          !formattedUrl.startsWith('https://')) {
+                        formattedUrl = 'https://$formattedUrl';
+                      }
+                      final uri = Uri.parse(formattedUrl);
+                      try {
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        } else {
+                          await launchUrl(uri, mode: LaunchMode.platformDefault);
+                        }
+                      } catch (e) {
+                        debugPrint('Could not launch banner URL $ctaUrl: $e');
+                      }
                     }
                     _dismissCurrent();
                   },
