@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/repositories/auth_repository.dart';
 import '../../../core/utils/color_utils.dart';
@@ -160,7 +159,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (confirm != true || !context.mounted) return;
 
     try {
-      await Supabase.instance.client.auth.signOut();
+      final authRepo = context.read<AuthRepository>();
+      await authRepo.signOut();
     } catch (_) {}
 
     if (!context.mounted) return;
