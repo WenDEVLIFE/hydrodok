@@ -1,7 +1,10 @@
- import 'package:flutter/material.dart';
-import '../core/utils/design_system.dart';
+import 'package:flutter/material.dart';
+import '../core/utils/color_utils.dart';
+import '../core/utils/typography.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+/// Floating bottom navigation bar used by the consumer (MainShell).
+/// Green background with white selected icon and dark unselected icon.
 class FitFormBottomNav extends StatelessWidget {
   final int currentIndex;
   final Function(int) onIndexChanged;
@@ -18,12 +21,15 @@ class FitFormBottomNav extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: FitFormDesign.cardBackground(context).withValues(alpha:0.8),
+        color: ColorUtils.forestGreen,
         borderRadius: BorderRadius.circular(30),
-        border: Border.all(
-          color: FitFormDesign.textPrimary(context).withValues(alpha: 0.1),
-        ),
-        boxShadow: FitFormDesign.softShadow,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -37,11 +43,9 @@ class FitFormBottomNav extends StatelessWidget {
     );
   }
 
-  Widget _buildNavItem(BuildContext context, int index, IconData icon, String label) {
+  Widget _buildNavItem(
+      BuildContext context, int index, IconData icon, String label) {
     final isSelected = currentIndex == index;
-    final color = isSelected 
-        ? (Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white)
-        : FitFormDesign.textPrimary(context).withValues(alpha: 0.5);
 
     return GestureDetector(
       onTap: () => onIndexChanged(index),
@@ -53,12 +57,12 @@ class FitFormBottomNav extends StatelessWidget {
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: isSelected ? FitFormDesign.primary : Colors.transparent,
+              color: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
               shape: BoxShape.circle,
             ),
             child: Icon(
               icon,
-              color: color,
+              color: isSelected ? Colors.white : Colors.black,
               size: 24,
             ),
           ),
@@ -66,7 +70,7 @@ class FitFormBottomNav extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: isSelected ? FitFormDesign.primary : FitFormDesign.textPrimary(context).withValues(alpha: 0.5),
+              color: isSelected ? Colors.white : Colors.black,
               fontSize: 10,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             ),

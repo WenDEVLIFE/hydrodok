@@ -532,42 +532,65 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
   // ── Bottom Navigation ──────────────────────────────────────────────────
 
   Widget _buildBottomNav() {
-    return NavigationBar(
-      selectedIndex: _currentTabIndex,
-      backgroundColor: Colors.white,
-      indicatorColor: ColorUtils.forestGreen.withOpacity(0.1),
-      onDestinationSelected: (index) {
-        setState(() => _currentTabIndex = index);
-      },
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(LucideIcons.layoutDashboard, color: Colors.grey),
-          selectedIcon: Icon(LucideIcons.layoutDashboard,
-              color: ColorUtils.forestGreen),
-          label: 'Dashboard',
-        ),
-        NavigationDestination(
-          icon: Icon(LucideIcons.map, color: Colors.grey),
-          selectedIcon: Icon(LucideIcons.map, color: ColorUtils.forestGreen),
-          label: 'Map',
-        ),
-        NavigationDestination(
-          icon: Icon(LucideIcons.messageSquare, color: Colors.grey),
-          selectedIcon: Icon(LucideIcons.messageSquare,
-              color: ColorUtils.forestGreen),
-          label: 'Forum',
-        ),
-        NavigationDestination(
-          icon: Icon(LucideIcons.users, color: Colors.grey),
-          selectedIcon: Icon(LucideIcons.users, color: ColorUtils.forestGreen),
-          label: 'Pooling',
-        ),
-        NavigationDestination(
-          icon: Icon(LucideIcons.user, color: Colors.grey),
-          selectedIcon: Icon(LucideIcons.user, color: ColorUtils.forestGreen),
-          label: 'Profile',
-        ),
-      ],
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: ColorUtils.forestGreen,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildNavItem(0, LucideIcons.layoutDashboard, 'Dashboard'),
+          _buildNavItem(1, LucideIcons.map, 'Map'),
+          _buildNavItem(2, LucideIcons.messageSquare, 'Forum'),
+          _buildNavItem(3, LucideIcons.users, 'Pooling'),
+          _buildNavItem(4, LucideIcons.user, 'Profile'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavItem(int index, IconData icon, String label) {
+    final isSelected = _currentTabIndex == index;
+
+    return GestureDetector(
+      onTap: () => setState(() => _currentTabIndex = index),
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? Colors.white.withOpacity(0.2)
+                  : Colors.transparent,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon,
+                color: isSelected ? Colors.white : Colors.black, size: 22),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.white : Colors.black,
+              fontSize: 10,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
