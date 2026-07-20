@@ -1,56 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 
-// ── Data Model ─────────────────────────────────────────────────────────────
-
-enum BannerStatus { live, scheduled, expired }
-
-class AppBanner {
-  final String id;
-  final String title;
-  final String content;
-  final BannerStatus status;
-
-  const AppBanner({
-    required this.id,
-    required this.title,
-    required this.content,
-    required this.status,
-  });
-}
-
-const _banners = <AppBanner>[
-  AppBanner(
-    id: '1',
-    title: 'Farming Seminar Invite',
-    content: '"Join Engineer John now for a seminar about farming"',
-    status: BannerStatus.live,
-  ),
-  AppBanner(
-    id: '2',
-    title: 'Harvest Season Promo',
-    content: '"20% off delivery fees this harvest season!"',
-    status: BannerStatus.live,
-  ),
-  AppBanner(
-    id: '3',
-    title: 'New Feature: Batch Pooling',
-    content: '"Try Batch Pooling to fulfill big orders together"',
-    status: BannerStatus.scheduled,
-  ),
-  AppBanner(
-    id: '4',
-    title: 'Old Seminar Reminder',
-    content: '"Reminder: seminar happens this weekend"',
-    status: BannerStatus.expired,
-  ),
-];
-
-// ── Screen Widget ──────────────────────────────────────────────────────────
-
+/// Admin Banner Manager:
+/// Create, preview, and delete pop-up banners shown to farmers/consumers
+/// when they open the app. Uses Supabase realtime — changes appear instantly
+/// on all connected client devices.
 class BannerManagerScreen extends StatefulWidget {
   const BannerManagerScreen({super.key});
 
@@ -59,9 +17,179 @@ class BannerManagerScreen extends StatefulWidget {
 }
 
 class _BannerManagerScreenState extends State<BannerManagerScreen> {
+  late final Stream<List<Map<String, dynamic>>> _bannersStream;
+  List<Map<String, dynamic>> _banners = [];
   int _selectedIndex = 0;
 
-  AppBanner get _selectedBanner => _banners[_selectedIndex];
+  @override
+  void initState() {
+    super.initState();
+    _bannersStream = Supabase.instance.client
+        .from('banners')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false);
+  }
+
+  Map<String, dynamic>? get _selectedBanner =>
+      _banners.isNotEmpty && _selectedIndex < _banners.length
+          ? _banners[_selectedIndex]
+          : null;
+
+  Future<void> _deleteBanner(String bannerId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Banner'),
+        content: const Text('Are you sure you want to delete this banner? '
+            'It will be removed from all user devices immediately.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      await Supabase.instance.client.from('banners').delete().eq('id', bannerId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Banner deleted — removed from all devices.')),
+        );
+        setState(() => _selectedIndex = 0);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting banner: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showAddBannerDialog() async {
+    final titleController = TextEditingController();
+    final contentController = TextEditingController();
+    final ctaController = TextEditingController(text: 'Learn More');
+    String status = 'live';
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('New Banner'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Title',
+                      hintText: 'e.g. Farming Seminar Invite',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: contentController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Content',
+                      hintText: 'Banner message shown to users...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: ctaController,
+                    decoration: const InputDecoration(
+                      labelText: 'Button Label',
+                      hintText: 'Learn More',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: status,
+                    decoration: const InputDecoration(
+                      labelText: 'Status',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'live', child: Text('Live (show now)')),
+                      DropdownMenuItem(value: 'scheduled', child: Text('Scheduled')),
+                      DropdownMenuItem(value: 'expired', child: Text('Expired (hidden)')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setDialogState(() => status = v);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ColorUtils.terracotta,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                if (titleController.text.trim().isEmpty ||
+                    contentController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('Title and content are required.')),
+                  );
+                  return;
+                }
+                try {
+                  final user = Supabase.instance.client.auth.currentUser;
+                  await Supabase.instance.client.from('banners').insert({
+                    'title': titleController.text.trim(),
+                    'content': contentController.text.trim(),
+                    'cta_label': ctaController.text.trim().isEmpty
+                        ? 'Learn More'
+                        : ctaController.text.trim(),
+                    'status': status,
+                    'created_by': user?.id,
+                  });
+                  if (ctx.mounted) Navigator.of(ctx).pop(true);
+                } catch (e) {
+                  if (ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Publish'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Banner published — live on all devices.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -79,43 +207,32 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
                   children: [
                     Text(
                       'Banner Manager',
-                      style: AppTypography.heading2(
-                        color: ColorUtils.darkText,
-                      ),
+                      style: AppTypography.heading2(color: ColorUtils.darkText),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Create pop-up banners shown when farmers/consumers open the app',
-                      style: AppTypography.bodyMedium(
-                        color: Colors.grey.shade600,
-                      ),
+                      'Create pop-up banners shown when farmers/consumers open the app. '
+                      'Changes appear instantly on all devices.',
+                      style: AppTypography.bodyMedium(color: Colors.grey.shade600),
                     ),
                   ],
                 ),
               ),
               ElevatedButton.icon(
-                onPressed: () {
-                  // TODO: New banner modal/form
-                },
+                onPressed: _showAddBannerDialog,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: ColorUtils.terracotta,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   elevation: 0,
                 ),
                 icon: const Icon(LucideIcons.plus, size: 18),
                 label: Text(
                   'New Banner',
-                  style: AppTypography.button(
-                    color: Colors.white,
-                    fontSize: 13,
-                  ),
+                  style: AppTypography.button(color: Colors.white, fontSize: 13),
                 ),
               ),
             ],
@@ -124,69 +241,97 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
 
           // ── Main Content Area (List + Live Preview) ──────────────────
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Left Column: Banners List ─────────────────────────
-                Expanded(
-                  flex: 5,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'ACTIVE & SCHEDULED',
-                        style: AppTypography.overline(
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: ListView.separated(
-                          itemCount: _banners.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final banner = _banners[index];
-                            final isSelected = _selectedIndex == index;
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _bannersStream,
+              builder: (context, snapshot) {
+                _banners = snapshot.data ?? [];
 
-                            return _BannerCard(
-                              banner: banner,
-                              isSelected: isSelected,
-                              onTap: () =>
-                                  setState(() => _selectedIndex = index),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 40),
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    _banners.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-                // ── Right Column: Mobile Device Live Preview ───────────
-                Expanded(
-                  flex: 4,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'LIVE PREVIEW — APP POP-UP',
-                        style: AppTypography.overline(
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w700,
+                if (_banners.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(LucideIcons.imageOff, size: 48, color: Colors.grey),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No banners yet. Tap "New Banner" to create one.',
+                          style: AppTypography.bodyMedium(color: Colors.grey.shade600),
                         ),
+                      ],
+                    ),
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Left Column: Banners List ─────────────────────────
+                    Expanded(
+                      flex: 5,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ACTIVE & SCHEDULED',
+                            style: AppTypography.overline(
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Expanded(
+                            child: ListView.separated(
+                              itemCount: _banners.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final banner = _banners[index];
+                                final isSelected = _selectedIndex == index;
+                                return _BannerCard(
+                                  banner: banner,
+                                  isSelected: isSelected,
+                                  onTap: () => setState(() => _selectedIndex = index),
+                                  onDelete: () => _deleteBanner(banner['id'] as String),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: Center(
-                          child: _buildPhoneFrame(_selectedBanner),
-                        ),
+                    ),
+                    const SizedBox(width: 40),
+                    // ── Right Column: Mobile Device Live Preview ───────────
+                    Expanded(
+                      flex: 4,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'LIVE PREVIEW — APP POP-UP',
+                            style: AppTypography.overline(
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Expanded(
+                            child: Center(
+                              child: _selectedBanner != null
+                                  ? _buildPhoneFrame(_selectedBanner!)
+                                  : const Icon(LucideIcons.smartphone,
+                                      size: 120, color: Colors.grey),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -196,7 +341,10 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
 
   // ── Mobile Phone Frame Widget ─────────────────────────────────────────────
 
-  Widget _buildPhoneFrame(AppBanner banner) {
+  Widget _buildPhoneFrame(Map<String, dynamic> banner) {
+    final content = (banner['content'] as String?)?.replaceAll('"', '') ?? '';
+    final ctaLabel = (banner['cta_label'] as String?) ?? 'Learn More';
+
     return Container(
       width: 260,
       height: 480,
@@ -215,10 +363,9 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(28),
         child: Container(
-          color: const Color(0xFFF2F7F2), // Light sage green app background
+          color: const Color(0xFFF2F7F2),
           child: Stack(
             children: [
-              // Top App Header Placeholder
               Positioned(
                 top: 16,
                 left: 16,
@@ -231,8 +378,6 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
                   ),
                 ),
               ),
-
-              // Centered Pop-up Modal Banner
               Center(
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -240,10 +385,7 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: ColorUtils.terracotta,
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: ColorUtils.terracotta, width: 1.5),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.1),
@@ -255,7 +397,6 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Bell / Announcement Icon
                       Container(
                         width: 36,
                         height: 36,
@@ -270,10 +411,8 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-
-                      // Banner Text Content
                       Text(
-                        banner.content.replaceAll('"', ''),
+                        content,
                         textAlign: TextAlign.center,
                         style: AppTypography.subtitle2(
                           color: ColorUtils.darkText,
@@ -282,8 +421,6 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
                         ),
                       ),
                       const SizedBox(height: 18),
-
-                      // CTA Button
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
@@ -298,11 +435,8 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
                             elevation: 0,
                           ),
                           child: Text(
-                            'Learn More',
-                            style: AppTypography.button(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
+                            ctaLabel,
+                            style: AppTypography.button(color: Colors.white, fontSize: 12),
                           ),
                         ),
                       ),
@@ -321,14 +455,16 @@ class _BannerManagerScreenState extends State<BannerManagerScreen> {
 // ── Banner Card Widget ─────────────────────────────────────────────────────
 
 class _BannerCard extends StatelessWidget {
-  final AppBanner banner;
+  final Map<String, dynamic> banner;
   final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
   const _BannerCard({
     required this.banner,
     required this.isSelected,
     required this.onTap,
+    required this.onDelete,
   });
 
   @override
@@ -351,7 +487,6 @@ class _BannerCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image Icon Box
             Container(
               width: 38,
               height: 38,
@@ -366,14 +501,12 @@ class _BannerCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 14),
-
-            // Content
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    banner.title,
+                    banner['title'] as String? ?? '',
                     style: AppTypography.subtitle1(
                       color: ColorUtils.darkText,
                       fontWeight: FontWeight.w700,
@@ -381,30 +514,34 @@ class _BannerCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    banner.content,
-                    style: AppTypography.bodySmall(
-                      color: Colors.grey.shade600,
-                    ),
+                    banner['content'] as String? ?? '',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodySmall(color: Colors.grey.shade600),
                   ),
                 ],
               ),
             ),
-
             const SizedBox(width: 12),
-
-            // Status Badge
-            _buildStatusBadge(banner.status),
+            _buildStatusBadge(banner['status'] as String? ?? 'live'),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(LucideIcons.trash2, size: 16, color: Colors.redAccent),
+              onPressed: onDelete,
+              tooltip: 'Delete',
+              visualDensity: VisualDensity.compact,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatusBadge(BannerStatus status) {
+  Widget _buildStatusBadge(String status) {
     final (String label, Color bg) = switch (status) {
-      BannerStatus.live => ('Live', ColorUtils.forestGreen),
-      BannerStatus.scheduled => ('Scheduled', const Color(0xFF2979FF)),
-      BannerStatus.expired => ('Expired', Colors.grey.shade600),
+      'live' => ('Live', ColorUtils.forestGreen),
+      'scheduled' => ('Scheduled', const Color(0xFF2979FF)),
+      _ => ('Expired', Colors.grey.shade600),
     };
 
     return Container(
