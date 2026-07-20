@@ -84,10 +84,10 @@ class _CustomTextFieldState extends State<CustomTextField>
           padding: const EdgeInsets.only(left: 4, bottom: 8),
           child: Text(
             widget.label,
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+            style: AppTypography.subtitle2(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white
+                  : ColorUtils.textDark,
             ),
           ),
         ),
@@ -97,26 +97,29 @@ class _CustomTextFieldState extends State<CustomTextField>
           scale: _scaleAnimation,
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).cardColor,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: widget.errorText != null
-                    ? Colors.redAccent
-                    : (_isFocused ? ColorUtils.forestGreen : Colors.grey.shade300),
-                width: 1.5,
+                    ? Colors
+                          .redAccent // Error color
+                    : (_isFocused
+                          ? ColorUtils.primary
+                          : Colors.transparent), // Focus -> Primary
+                width: 2,
               ),
               boxShadow: _isFocused
                   ? [
                       BoxShadow(
-                        color: ColorUtils.forestGreen.withValues(alpha: 0.15),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
+                        color: ColorUtils.accent.withValues(alpha: 0.2),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
                       ),
                     ]
                   : [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 6,
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
                     ],
@@ -129,24 +132,27 @@ class _CustomTextFieldState extends State<CustomTextField>
               onChanged: widget.onChanged,
               onTap: widget.onTap,
               validator: widget.validator,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
+              style: AppTypography.bodyLarge(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : ColorUtils.textDark,
               ),
               decoration: InputDecoration(
                 hintText: widget.hint,
-                hintStyle: TextStyle(
-                  color: Colors.grey.shade500,
-                  fontSize: 14,
+                hintStyle: AppTypography.bodyLarge(
+                  color:
+                      (Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : ColorUtils.textDark)
+                          .withValues(alpha: 0.4),
                 ),
                 prefixIcon: widget.prefixIcon,
                 suffixIcon: widget.suffixIcon,
                 border: InputBorder.none,
                 errorStyle: const TextStyle(height: 0),
                 contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
+                  horizontal: 20,
+                  vertical: 16,
                 ),
               ),
             ),
