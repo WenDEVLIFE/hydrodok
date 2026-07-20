@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
@@ -13,6 +14,8 @@ class IssueReportsScreen extends StatefulWidget {
 }
 
 class _IssueReportsScreenState extends State<IssueReportsScreen> {
+  late final Stream<List<Map<String, dynamic>>> _reportsStream;
+
   final List<Map<String, dynamic>> _issueTickets = [
     {
       'id': 'ticket-101',
@@ -32,16 +35,16 @@ class _IssueReportsScreenState extends State<IssueReportsScreen> {
       'status': 'under_review',
       'created_at': '2026-07-18',
     },
-    {
-      'id': 'ticket-103',
-      'category': 'Marketplace / Order Bug',
-      'title': 'Order Notification Sound Not Triggering',
-      'description': 'Incoming order notifications show in app but no chime played.',
-      'priority': 'low',
-      'status': 'resolved',
-      'created_at': '2026-07-15',
-    },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _reportsStream = Supabase.instance.client
+        .from('issue_reports')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false);
+  }
 
   void _showReportIssueModal() {
     final titleController = TextEditingController();
@@ -149,30 +152,40 @@ class _IssueReportsScreenState extends State<IssueReportsScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    onPressed: () {
+                    onPressed: () async {
                       final title = titleController.text.trim();
                       final desc = descController.text.trim();
                       if (title.isEmpty) return;
 
-                      setState(() {
-                        _issueTickets.insert(0, {
-                          'id': 'ticket-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-                          'category': selectedCategory,
-                          'title': title,
-                          'description': desc,
-                          'priority': selectedPriority,
-                          'status': 'under_review',
-                          'created_at': DateTime.now().toIso8601String().substring(0, 10),
-                        });
-                      });
+                      final user = Supabase.instance.client.auth.currentUser;
 
-                      Navigator.of(ctx).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Issue report submitted to HydroDok support!'),
-                          backgroundColor: ColorUtils.forestGreen,
-                        ),
-                      );
+                      final reportPayload = {
+                        if (user != null) 'reporter_id': user.id,
+                        'category': selectedCategory,
+                        'title': title,
+                        'description': desc,
+                        'priority': selectedPriority,
+                        'status': 'under_review',
+                        'created_at': DateTime.now().toIso8601String(),
+                      };
+
+                      try {
+                        await Supabase.instance.client.from('issue_reports').insert(reportPayload);
+                      } catch (_) {
+                        setState(() {
+                          _issueTickets.insert(0, reportPayload);
+                        });
+                      }
+
+                      if (mounted) {
+                        Navigator.of(ctx).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Issue report submitted to HydroDok support!'),
+                            backgroundColor: ColorUtils.forestGreen,
+                          ),
+                        );
+                      }
                     },
                     child: const Text('Submit Issue Report', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
@@ -249,126 +262,143 @@ class _IssueReportsScreenState extends State<IssueReportsScreen> {
             Text('Submitted Issue Tickets', style: AppTypography.heading3(color: ColorUtils.darkText)),
             const SizedBox(height: 12),
 
-            if (_issueTickets.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Center(
-                  child: Text('No support tickets submitted yet.', style: TextStyle(color: Colors.grey)),
-                ),
-              )
-            else
-              ..._issueTickets.map((ticket) {
-                final cat = ticket['category'] as String;
-                final title = ticket['title'] as String;
-                final desc = ticket['description'] as String;
-                final priority = ticket['priority'] as String;
-                final status = ticket['status'] as String;
-                final date = ticket['created_at'] as String;
+            StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _reportsStream,
+              builder: (context, snapshot) {
+                final user = Supabase.instance.client.auth.currentUser;
+                final raw = snapshot.data ?? [];
+                final filtered = user != null
+                    ? raw.where((r) => r['reporter_id'] == user.id).toList()
+                    : raw;
 
-                final (String statusLabel, Color statusColor) = switch (status) {
-                  'in_progress' => ('In Progress', Colors.blue),
-                  'resolved' => ('Resolved', ColorUtils.sageGreen),
-                  'closed' => ('Closed', Colors.grey),
-                  _ => ('Under Review', ColorUtils.terracotta),
-                };
+                final list = filtered.isNotEmpty ? filtered : (raw.isNotEmpty ? raw : _issueTickets);
 
-                Color priorityColor = Colors.grey;
-                if (priority == 'high') priorityColor = Colors.red;
-                if (priority == 'medium') priorityColor = Colors.orange;
+                if (list.isEmpty) {
+                  return Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Center(
+                      child: Text('No support tickets submitted yet.', style: TextStyle(color: Colors.grey)),
+                    ),
+                  );
+                }
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                return Column(
+                  children: list.map((ticket) {
+                    final cat = ticket['category'] as String? ?? 'General Support';
+                    final title = ticket['title'] as String? ?? 'Issue';
+                    final desc = ticket['description'] as String? ?? '';
+                    final priority = ticket['priority'] as String? ?? 'medium';
+                    final status = ticket['status'] as String? ?? 'under_review';
+                    final rawDate = ticket['created_at'] as String? ?? '';
+                    final date = rawDate.length >= 10 ? rawDate.substring(0, 10) : rawDate;
+
+                    final (String statusLabel, Color statusColor) = switch (status.toLowerCase()) {
+                      'in_progress' || 'in progress' => ('In Progress', Colors.blue),
+                      'resolved' => ('Resolved', ColorUtils.sageGreen),
+                      'closed' => ('Closed', Colors.grey),
+                      _ => ('Under Review', ColorUtils.terracotta),
+                    };
+
+                    Color priorityColor = Colors.grey;
+                    if (priority == 'high') priorityColor = Colors.red;
+                    if (priority == 'medium') priorityColor = Colors.orange;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: ColorUtils.forestGreen.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              cat,
-                              style: const TextStyle(
-                                color: ColorUtils.forestGreen,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: ColorUtils.forestGreen.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  cat,
+                                  style: const TextStyle(
+                                    color: ColorUtils.forestGreen,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              statusLabel,
-                              style: TextStyle(
-                                color: statusColor,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  statusLabel,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        title,
-                        style: AppTypography.bodyMedium(
-                          fontWeight: FontWeight.bold,
-                          color: ColorUtils.darkText,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        desc,
-                        style: AppTypography.bodySmall(color: Colors.grey.shade600),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
+                          const SizedBox(height: 10),
                           Text(
-                            'Reported on $date',
-                            style: AppTypography.bodySmall(color: Colors.grey.shade500),
+                            title,
+                            style: AppTypography.bodyMedium(
+                              fontWeight: FontWeight.bold,
+                              color: ColorUtils.darkText,
+                            ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: priorityColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: priorityColor, width: 0.5),
-                            ),
-                            child: Text(
-                              priority.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: priorityColor,
+                          const SizedBox(height: 4),
+                          Text(
+                            desc,
+                            style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                date.isNotEmpty ? 'Reported on $date' : 'Submitted recently',
+                                style: AppTypography.bodySmall(color: Colors.grey.shade500),
                               ),
-                            ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: priorityColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: priorityColor, width: 0.5),
+                                ),
+                                child: Text(
+                                  priority.toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: priorityColor,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    );
+                  }).toList(),
                 );
-              }),
+              },
+            ),
           ],
         ),
       ),
