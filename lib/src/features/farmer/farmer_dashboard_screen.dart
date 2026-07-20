@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart' hide Path;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
+import '../onboarding/farm_map_picker_dialog.dart';
 import '../user/forum/forum_screen.dart';
 import '../user/map/map_screen.dart';
 import '../user/pooling/pooling_screen.dart';
@@ -262,6 +264,25 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+
+                      // ── Set Farm Location Button ──────────────────────────────
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _openMapPicker,
+                          icon: const Icon(LucideIcons.mapPin, size: 18),
+                          label: const Text('Set Farm Location on Map'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: ColorUtils.forestGreen,
+                            side: const BorderSide(color: ColorUtils.forestGreen),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 24),
 
                       // ── Today's Maintenance Schedule ─────────────────────────
@@ -314,6 +335,43 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
         colorScheme: ColorUtils.lightColorScheme,
         useMaterial3: true,
       );
+
+  // ── Map Location Picker ────────────────────────────────────────────────
+
+  Future<void> _openMapPicker() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    final result = await Navigator.of(context).push<MapLocationResult>(
+      MaterialPageRoute(
+        builder: (_) => const FarmMapPickerDialog(),
+      ),
+    );
+
+    if (result == null) return;
+
+    // Save coordinates to the farm
+    try {
+      await Supabase.instance.client.from('farms').update({
+        'latitude': result.latLng.latitude,
+        'longitude': result.latLng.longitude,
+        'address': result.address,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('owner_id', user.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Farm location updated!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save location: $e')),
+        );
+      }
+    }
+  }
 
   // ── Farm Status Card ────────────────────────────────────────────────────
 

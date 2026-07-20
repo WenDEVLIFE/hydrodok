@@ -21,6 +21,8 @@ class FarmService {
     required List<String> produceTypes,
     String? description,
     String? photoUrl,
+    double? latitude,
+    double? longitude,
   }) async {
     // Insert the farm row directly (INSERT policy added in migration)
     await _supabase.from('farms').insert({
@@ -29,8 +31,8 @@ class FarmService {
       'address': address,
       'produce_types': produceTypes,
       'status': 'active',
-      'latitude': 0,
-      'longitude': 0,
+      'latitude': latitude ?? 0,
+      'longitude': longitude ?? 0,
     });
 
     // Now update with optional fields

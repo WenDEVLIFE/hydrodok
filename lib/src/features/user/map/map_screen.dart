@@ -6,11 +6,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/models/farm.dart';
-import '../../../core/repositories/farm_repository.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 
@@ -66,47 +64,22 @@ class _MapScreenState extends State<MapScreen> {
   LatLng? _userLocation;
   List<Farm> _farmsList = _mockFarms;
 
+  // Realtime stream for verified farms
+  late final Stream<List<Map<String, dynamic>>> _farmsStream;
+
   @override
   void initState() {
     super.initState();
     _determinePosition();
-    _loadVerifiedFarms();
+    _initStream();
   }
 
-  Future<void> _loadVerifiedFarms() async {
-    try {
-      final farmRepository = SupabaseFarmRepository();
-      final rawList = await farmRepository.getVerifiedFarms();
-      if (rawList.isNotEmpty && mounted) {
-        final List<Farm> liveFarms = rawList.map((data) {
-          final lat = (data['latitude'] as num?)?.toDouble() ?? 14.5995;
-          final lng = (data['longitude'] as num?)?.toDouble() ?? 120.9842;
-          final name = data['farm_name'] as String? ?? 'Verified Hydro Farm';
-          final produceList = data['produce_types'] as List<dynamic>?;
-          final produce = (produceList != null && produceList.isNotEmpty)
-              ? produceList.first.toString()
-              : 'Hydroponics';
-
-          return Farm(
-            id: data['id'] as String? ?? UniqueKey().toString(),
-            name: name,
-            product: produce,
-            rating: 4.9,
-            reviewCount: 24,
-            unitsInStock: 5000,
-            pricePerKg: 120,
-            latitude: lat,
-            longitude: lng,
-          );
-        }).toList();
-
-        setState(() {
-          _farmsList = liveFarms;
-        });
-      }
-    } catch (_) {
-      // Keep fallback mock list if offline or table not populated
-    }
+  void _initStream() {
+    // Realtime: auto-updates when a farm is verified/unverified or location changes
+    _farmsStream = Supabase.instance.client
+        .from('farms')
+        .stream(primaryKey: ['id'])
+        .eq('verification_status', 'verified');
   }
 
   Future<void> _determinePosition() async {
@@ -187,44 +160,75 @@ class _MapScreenState extends State<MapScreen> {
 
               // ── Map ──────────────────────────────────────────────────────
               Expanded(
-                child: Stack(
-                  children: [
-                    FlutterMap(
-                      mapController: _mapController,
-                      options: MapOptions(
-                        initialCenter:
-                            const LatLng(14.5995, 120.9842),
-                        initialZoom: 14,
-                        onTap: (_, __) =>
-                            setState(() => _selectedFarm = null),
-                      ),
+                child: StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _farmsStream,
+                  builder: (context, snapshot) {
+                    // Update farms list from realtime stream
+                    if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                      final liveFarms = snapshot.data!.map((data) {
+                        final lat = (data['latitude'] as num?)?.toDouble() ?? 14.5995;
+                        final lng = (data['longitude'] as num?)?.toDouble() ?? 120.9842;
+                        final name = data['farm_name'] as String? ?? 'Verified Hydro Farm';
+                        final produceList = data['produce_types'] as List<dynamic>?;
+                        final produce = (produceList != null && produceList.isNotEmpty)
+                            ? produceList.first.toString()
+                            : 'Hydroponics';
+
+                        return Farm(
+                          id: data['id'] as String? ?? UniqueKey().toString(),
+                          name: name,
+                          product: produce,
+                          rating: 4.9,
+                          reviewCount: 24,
+                          unitsInStock: 5000,
+                          pricePerKg: 120,
+                          latitude: lat,
+                          longitude: lng,
+                        );
+                      }).toList();
+
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) setState(() => _farmsList = liveFarms);
+                      });
+                    }
+
+                    return Stack(
                       children: [
-                        TileLayer(
-                          urlTemplate:
-                              'https://api.maptiler.com/maps/streets-v2/'
-                              '{z}/{x}/{y}.png?key=$apiKey',
-                          userAgentPackageName: 'com.hydrodok.app',
+                        FlutterMap(
+                          mapController: _mapController,
+                          options: MapOptions(
+                            initialCenter: const LatLng(14.5995, 120.9842),
+                            initialZoom: 14,
+                            onTap: (_, __) => setState(() => _selectedFarm = null),
+                          ),
+                          children: [
+                            TileLayer(
+                              urlTemplate: 'https://api.maptiler.com/maps/streets-v2/'
+                                  '{z}/{x}/{y}.png?key=$apiKey',
+                              userAgentPackageName: 'com.hydrodok.app',
+                            ),
+                            MarkerLayer(markers: _buildMarkers()),
+                          ],
                         ),
-                        MarkerLayer(markers: _buildMarkers()),
+
+                        // Zoom controls
+                        Positioned(
+                          right: 16,
+                          bottom: _selectedFarm != null ? 180 : 24,
+                          child: _buildZoomControls(),
+                        ),
+
+                        // Selected-farm info card
+                        if (_selectedFarm != null)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: _buildFarmCard(_selectedFarm!),
+                          ),
                       ],
-                    ),
-
-                    // Zoom controls
-                    Positioned(
-                      right: 16,
-                      bottom: _selectedFarm != null ? 180 : 24,
-                      child: _buildZoomControls(),
-                    ),
-
-                    // Selected-farm info card
-                    if (_selectedFarm != null)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: _buildFarmCard(_selectedFarm!),
-                      ),
-                  ],
+                    );
+                  },
                 ),
               ),
             ],
