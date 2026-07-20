@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -36,18 +37,20 @@ void main() async {
 
 Future<bool> initializeSupabase() async {
   try {
-    try {
-      await dotenv.load(fileName: ".env");
-    } catch (_) {
-      // Optional: .env file is not present in CI / Vercel build environment
+    if (!kIsWeb) {
+      try {
+        await dotenv.load(fileName: ".env");
+      } catch (e) {
+        debugPrint('dotenv.load skipped: $e');
+      }
     }
 
-    final supabaseUrl = dotenv.env['SUPABASE_URL'] ??
+    final supabaseUrl = (kIsWeb ? null : dotenv.env['SUPABASE_URL']) ??
         const String.fromEnvironment(
           'SUPABASE_URL',
           defaultValue: 'https://jhmzjebwyiknvltcljck.supabase.co',
         );
-    final supabaseKey = dotenv.env['SUPABASE_ANON_KEY'] ??
+    final supabaseKey = (kIsWeb ? null : dotenv.env['SUPABASE_ANON_KEY']) ??
         const String.fromEnvironment(
           'SUPABASE_ANON_KEY',
           defaultValue:
@@ -56,7 +59,7 @@ Future<bool> initializeSupabase() async {
 
     await Supabase.initialize(
       url: supabaseUrl,
-      anonKey: supabaseKey,
+      publishableKey: supabaseKey,
     );
 
     debugPrint('✅ Connected to Supabase');

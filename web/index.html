@@ -32,6 +32,12 @@
     }
     .loading-container {
       text-align: center;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 9999;
+      pointer-events: none;
     }
     .spinner {
       width: 44px;
@@ -53,6 +59,20 @@
     <div class="spinner"></div>
     <div style="font-size: 14px; opacity: 0.8;">Loading Hydrodok...</div>
   </div>
+
   <script src="flutter_bootstrap.js" async></script>
+
+  <script>
+    // Remove loading overlay as soon as Flutter renders its first frame
+    window.addEventListener('flutter-first-frame', function () {
+      var el = document.getElementById('loading');
+      if (el) el.remove();
+    });
+    // Safety fallback: remove loading overlay after 3.5 seconds max
+    setTimeout(function() {
+      var el = document.getElementById('loading');
+      if (el) el.remove();
+    }, 3500);
+  </script>
 </body>
 </html>
