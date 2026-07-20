@@ -255,3 +255,82 @@ create policy "Farmers and Admins delete products"
   on public.products for delete
   using (auth.uid() = farmer_id or public.is_admin());
 
+-- ─────────────────────────────────────────────────────────────────────────────
+--  8. Nutrient Logs Table & RLS Policies
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create table if not exists public.nutrient_logs (
+  id uuid primary key default gen_random_uuid(),
+  farm_id uuid references public.farms(id) on delete cascade,
+  nutrient_name text not null,
+  amount numeric default 0,
+  notes text,
+  created_at timestamptz default now()
+);
+
+alter table public.nutrient_logs add column if not exists created_at timestamptz default now();
+
+alter table public.nutrient_logs enable row level security;
+
+drop policy if exists "Farmers can insert own nutrient logs" on public.nutrient_logs;
+create policy "Farmers can insert own nutrient logs"
+  on public.nutrient_logs for insert
+  with check (
+    auth.role() = 'authenticated'
+  );
+
+drop policy if exists "Farmers and Admins view nutrient logs" on public.nutrient_logs;
+create policy "Farmers and Admins view nutrient logs"
+  on public.nutrient_logs for select
+  using (
+    auth.role() = 'authenticated'
+  );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+--  9. Farm Tasks Table & RLS Policies
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create table if not exists public.farm_tasks (
+  id uuid primary key default gen_random_uuid(),
+  farm_id uuid references public.farms(id) on delete cascade,
+  title text not null,
+  description text,
+  due_date timestamptz,
+  priority text default 'medium',
+  status text default 'pending',
+  created_at timestamptz default now()
+);
+
+alter table public.farm_tasks add column if not exists created_at timestamptz default now();
+
+alter table public.farm_tasks enable row level security;
+
+drop policy if exists "Farmers can insert own tasks" on public.farm_tasks;
+create policy "Farmers can insert own tasks"
+  on public.farm_tasks for insert
+  with check (
+    auth.role() = 'authenticated'
+  );
+
+drop policy if exists "Farmers and Admins view tasks" on public.farm_tasks;
+create policy "Farmers and Admins view tasks"
+  on public.farm_tasks for select
+  using (
+    auth.role() = 'authenticated'
+  );
+
+drop policy if exists "Farmers and Admins update tasks" on public.farm_tasks;
+create policy "Farmers and Admins update tasks"
+  on public.farm_tasks for update
+  using (
+    auth.role() = 'authenticated'
+  );
+
+drop policy if exists "Farmers and Admins delete tasks" on public.farm_tasks;
+create policy "Farmers and Admins delete tasks"
+  on public.farm_tasks for delete
+  using (
+    auth.role() = 'authenticated'
+  );
+
+

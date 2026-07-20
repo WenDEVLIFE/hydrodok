@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/repositories/nutrient_task_repository.dart';
 import '../../core/service/product_service.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
@@ -28,16 +29,21 @@ class FarmerDashboardScreen extends StatefulWidget {
 class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
   int _currentTabIndex = 0;
 
+  late final NutrientTaskRepository _nutrientTaskRepo;
+
   // ── Realtime stream ─────────────────────────────────────────────────────
   late final Stream<List<Map<String, dynamic>>> _farmStream;
 
-  // ── Products & Orders ───────────────────────────────────────────────────
+  // ── Products, Orders, Tasks & Nutrient Logs ─────────────────────────────
   List<Map<String, dynamic>> _myProducts = [];
   List<Map<String, dynamic>> _myOrders = [];
+  List<Map<String, dynamic>> _myTasks = [];
+  List<Map<String, dynamic>> _myNutrientLogs = [];
 
   @override
   void initState() {
     super.initState();
+    _nutrientTaskRepo = SupabaseNutrientTaskRepository();
     _initStream();
     _loadProductsAndOrders();
   }
@@ -64,6 +70,20 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
         setState(() {
           _myProducts = products;
           _myOrders = orders;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadTasksAndLogs(String farmId) async {
+    try {
+      final tasks = await _nutrientTaskRepo.getFarmTasks(farmId);
+      final logs = await _nutrientTaskRepo.getNutrientLogs(farmId);
+
+      if (mounted) {
+        setState(() {
+          _myTasks = tasks;
+          _myNutrientLogs = logs;
         });
       }
     } catch (_) {}
@@ -252,22 +272,28 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                             label: 'Log Nutrients',
                             icon: LucideIcons.droplets,
                             onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Nutrient logging coming soon'),
-                                ),
-                              );
+                              final farmId = farm?['id'] as String?;
+                              if (farmId != null && farmId.isNotEmpty) {
+                                _showLogNutrientsDialog(farmId);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please complete farm onboarding first.')),
+                                );
+                              }
                             },
                           ),
                           _buildQuickActionButton(
                             label: 'Add Task',
                             icon: LucideIcons.calendarPlus,
                             onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Task manager coming soon'),
-                                ),
-                              );
+                              final farmId = farm?['id'] as String?;
+                              if (farmId != null && farmId.isNotEmpty) {
+                                _showAddTaskDialog(farmId);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please complete farm onboarding first.')),
+                                );
+                              }
                             },
                           ),
                           _buildQuickActionButton(
@@ -311,35 +337,172 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // ── Today's Maintenance Schedule ─────────────────────────
-                      Text(
-                        "Today's Maintenance Schedule",
-                        style: AppTypography.heading3(
-                          color: ColorUtils.darkText,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      // ── Tasks ───────────────────────────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Tasks',
+                            style: AppTypography.heading3(
+                              color: ColorUtils.darkText,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () {
+                              final farmId = farm?['id'] as String?;
+                              if (farmId != null) _showAddTaskDialog(farmId);
+                            },
+                            icon: const Icon(LucideIcons.plus, size: 16),
+                            label: const Text('Add Task'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: ColorUtils.forestGreen,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
-                      _buildScheduleTile(
-                        time: '08:00 AM',
-                        title: 'Reservoir pH & EC Test',
-                        subtitle: 'Check water quality',
-                        isDone: true,
+                      if (_myTasks.isEmpty) ...[
+                        _buildScheduleTile(
+                          time: '08:00 AM',
+                          title: 'Reservoir pH & EC Test',
+                          subtitle: 'Check water quality',
+                          isDone: true,
+                        ),
+                        _buildScheduleTile(
+                          time: '01:30 PM',
+                          title: 'Nutrient Solution Top-up',
+                          subtitle: 'Add Masterblend 4-18-38 Formula',
+                          isDone: false,
+                        ),
+                        _buildScheduleTile(
+                          time: '05:00 PM',
+                          title: 'End-of-Day Inspection',
+                          subtitle: 'Walk through and check all systems',
+                          isDone: false,
+                        ),
+                      ] else
+                        ..._myTasks.map((t) {
+                          final taskId = t['id'] as String;
+                          final farmId = farm?['id'] as String?;
+                          final title = t['title'] as String? ?? 'Task';
+                          final desc = t['description'] as String? ?? '';
+                          final isCompleted = t['status'] == 'completed';
+                          final priority = t['priority'] as String? ?? 'medium';
+
+                          return _buildScheduleTile(
+                            time: '',
+                            title: title,
+                            subtitle: desc,
+                            isDone: isCompleted,
+                            priority: priority,
+                            onToggle: () async {
+                              final nextStatus = isCompleted ? 'pending' : 'completed';
+                              await _nutrientTaskRepo.updateTaskStatus(taskId, nextStatus);
+                              if (farmId != null) _loadTasksAndLogs(farmId);
+                            },
+                          );
+                        }),
+                      const SizedBox(height: 28),
+
+                      // ── Nutrient Logs ─────────────────────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Nutrient Logs',
+                            style: AppTypography.heading3(
+                              color: ColorUtils.darkText,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () {
+                              final farmId = farm?['id'] as String?;
+                              if (farmId != null) _showLogNutrientsDialog(farmId);
+                            },
+                            icon: const Icon(LucideIcons.plus, size: 16),
+                            label: const Text('Log Nutrient'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: ColorUtils.forestGreen,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
-                      _buildScheduleTile(
-                        time: '01:30 PM',
-                        title: 'Nutrient Solution Top-up',
-                        subtitle: 'Add Masterblend 4-18-38 Formula',
-                        isDone: false,
-                      ),
-                      const SizedBox(height: 8),
-                      _buildScheduleTile(
-                        time: '05:00 PM',
-                        title: 'End-of-Day Inspection',
-                        subtitle: 'Walk through and check all systems',
-                        isDone: false,
-                      ),
+                      const SizedBox(height: 12),
+                      if (_myNutrientLogs.isEmpty)
+                        _buildEmptyState('No nutrient logs recorded yet. Tap "Log Nutrient" to record one.')
+                      else
+                        ..._myNutrientLogs.map((log) {
+                          final nutrientName = log['nutrient_name'] as String? ?? 'Nutrient';
+                          final amount = (log['amount'] as num?)?.toDouble() ?? 0;
+                          final notes = log['notes'] as String? ?? '';
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.grey.shade200),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: ColorUtils.forestGreen.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(LucideIcons.droplets, color: ColorUtils.forestGreen, size: 20),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        nutrientName,
+                                        style: AppTypography.bodyMedium(
+                                          color: ColorUtils.darkText,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      if (notes.isNotEmpty) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          notes,
+                                          style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: ColorUtils.forestGreen.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '${amount % 1 == 0 ? amount.toInt() : amount} g/ml',
+                                    style: AppTypography.bodySmall(
+                                      color: ColorUtils.forestGreen,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
                       const SizedBox(height: 32),
 
                       // ── My Products ──────────────────────────────────────────
@@ -440,6 +603,208 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
         );
       }
     }
+  }
+
+  // ── Log Nutrients Dialog ──────────────────────────────────────────────────
+
+  void _showLogNutrientsDialog(String farmId) {
+    final nameController = TextEditingController();
+    final amountController = TextEditingController();
+    final notesController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(LucideIcons.droplets, color: ColorUtils.forestGreen),
+            SizedBox(width: 8),
+            Text('Log Hydroponic Nutrient'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Nutrient Name',
+                  hintText: 'e.g. Masterblend 4-18-38, pH Down',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Amount (g or ml)',
+                  hintText: 'e.g. 50.0',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (Optional)',
+                  hintText: 'e.g. Added during reservoir top-up',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: ColorUtils.forestGreen),
+            onPressed: () async {
+              final name = nameController.text.trim();
+              final amount = double.tryParse(amountController.text.trim()) ?? 0;
+              if (name.isEmpty) return;
+
+              try {
+                await _nutrientTaskRepo.logNutrient(
+                  farmId: farmId,
+                  nutrientName: name,
+                  amount: amount,
+                  notes: notesController.text.trim(),
+                );
+                if (mounted) {
+                  Navigator.of(ctx).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Nutrient log recorded!'),
+                      backgroundColor: ColorUtils.forestGreen,
+                    ),
+                  );
+                  _loadTasksAndLogs(farmId);
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error logging nutrient: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Save Log', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Add Task Dialog ───────────────────────────────────────────────────────
+
+  void _showAddTaskDialog(String farmId) {
+    final titleController = TextEditingController();
+    final descController = TextEditingController();
+    String selectedPriority = 'medium';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: const [
+              Icon(LucideIcons.calendarPlus, color: ColorUtils.forestGreen),
+              SizedBox(width: 8),
+              Text('Add Maintenance Task'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Task Title',
+                    hintText: 'e.g. Reservoir pH & EC Test',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: descController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Description / Instructions',
+                    hintText: 'e.g. Check water quality and clean filter',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedPriority,
+                  decoration: const InputDecoration(
+                    labelText: 'Priority',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'low', child: Text('Low Priority')),
+                    DropdownMenuItem(value: 'medium', child: Text('Medium Priority')),
+                    DropdownMenuItem(value: 'high', child: Text('High Priority')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setModalState(() => selectedPriority = val);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: ColorUtils.forestGreen),
+              onPressed: () async {
+                final title = titleController.text.trim();
+                if (title.isEmpty) return;
+
+                try {
+                  await _nutrientTaskRepo.addTask(
+                    farmId: farmId,
+                    title: title,
+                    description: descController.text.trim(),
+                    dueDate: DateTime.now(),
+                    priority: selectedPriority,
+                  );
+                  if (mounted) {
+                    Navigator.of(ctx).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Task added to schedule!'),
+                        backgroundColor: ColorUtils.forestGreen,
+                      ),
+                    );
+                    _loadTasksAndLogs(farmId);
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error adding task: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Add Task', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Add Product Dialog ────────────────────────────────────────────────
@@ -873,20 +1238,28 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
     required String title,
     required String subtitle,
     required bool isDone,
+    VoidCallback? onToggle,
+    String? priority,
   }) {
+    Color priorityColor = Colors.grey;
+    if (priority == 'high') priorityColor = Colors.red;
+    if (priority == 'medium') priorityColor = Colors.orange;
+    if (priority == 'low') priorityColor = Colors.blue;
+
     return Container(
+      margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isDone
-              ? ColorUtils.sageGreen.withOpacity(0.5)
+              ? ColorUtils.sageGreen.withValues(alpha: 0.5)
               : Colors.grey.shade200,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -894,40 +1267,71 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
       ),
       child: Row(
         children: [
-          Icon(
-            isDone ? LucideIcons.checkCircle2 : LucideIcons.circle,
-            color: isDone ? ColorUtils.forestGreen : Colors.grey.shade300,
-            size: 22,
+          GestureDetector(
+            onTap: onToggle,
+            child: Icon(
+              isDone ? LucideIcons.checkCircle2 : LucideIcons.circle,
+              color: isDone ? ColorUtils.forestGreen : Colors.grey.shade300,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: AppTypography.bodyMedium(
-                    color: ColorUtils.darkText,
-                    fontWeight: FontWeight.w600,
-                  ).copyWith(
-                    decoration: isDone ? TextDecoration.lineThrough : null,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: AppTypography.bodyMedium(
+                          color: ColorUtils.darkText,
+                          fontWeight: FontWeight.w600,
+                        ).copyWith(
+                          decoration: isDone ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                    ),
+                    if (priority != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: priorityColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: priorityColor, width: 0.5),
+                        ),
+                        child: Text(
+                          priority.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: priorityColor,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: AppTypography.bodySmall(color: Colors.grey.shade600),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: AppTypography.bodySmall(color: Colors.grey.shade600),
-                ),
+                ],
               ],
             ),
           ),
-          Text(
-            time,
-            style: AppTypography.bodySmall(
-              color: ColorUtils.forestGreen,
-              fontWeight: FontWeight.bold,
+          if (time.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Text(
+              time,
+              style: AppTypography.bodySmall(
+                color: ColorUtils.forestGreen,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
