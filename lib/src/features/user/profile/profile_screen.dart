@@ -607,24 +607,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 
   Widget _buildStatsRow() {
-    // Build star label: e.g. "4.8 ★" or "—" if no reviews
-    final ratingLabel = _isFarmer
-        ? (_reviewCount > 0 ? '${_avgRating.toStringAsFixed(1)} ★' : '— ★')
-        : '—';
-    final reviewLabel = _isFarmer ? '$_reviewCount' : '—';
+    if (!_isFarmer) {
+      // Consumers only see applicable stats.
+      return Row(
+        children: [
+          Expanded(child: _buildStatItem('Orders', '$_orderCount')),
+        ],
+      );
+    }
+
+    // Farmers see products, rating, and reviews.
+    final ratingLabel = _reviewCount > 0 ? '${_avgRating.toStringAsFixed(1)} ★' : '— ★';
 
     return Row(
       children: [
-        Expanded(
-          child: _buildStatItem(
-            _isFarmer ? 'Products' : 'Orders',
-            _isFarmer ? '$_productCount' : '$_orderCount',
-          ),
-        ),
+        Expanded(child: _buildStatItem('Products', '$_productCount')),
         const SizedBox(width: 12),
         Expanded(child: _buildStatItem('Rating', ratingLabel)),
         const SizedBox(width: 12),
-        Expanded(child: _buildStatItem('Reviews', reviewLabel)),
+        Expanded(child: _buildStatItem('Reviews', '$_reviewCount')),
       ],
     );
   }
