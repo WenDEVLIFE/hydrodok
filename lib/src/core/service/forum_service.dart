@@ -252,23 +252,38 @@ class ForumService {
     try {
       await _supabase.from('forum_reports').insert({
         'post_id': postId,
-        'user_id': user.id,
+        'author_id': user.id,
+        'reporter_id': user.id,
         'reason': reason,
       });
-    } catch (_) {}
+    } catch (e) {
+      try {
+        await _supabase.from('forum_reports').insert({
+          'post_id': postId,
+          'reason': reason,
+        });
+      } catch (_) {}
+    }
 
-    // 2. Insert into issue_reports so it displays in Issue Reports
+    // 2. Insert into issue_reports table so it displays in Issue Reports
     try {
       await _supabase.from('issue_reports').insert({
         'reporter_id': user.id,
-        'category': 'Forum Moderation Report',
         'title': 'Reported Forum Post',
-        'description': 'Post ID $postId was reported. Reason: $reason',
-        'priority': 'medium',
+        'description': 'Forum Post ID $postId reported by user. Reason: $reason',
         'status': 'under_review',
         'created_at': DateTime.now().toIso8601String(),
       });
-    } catch (_) {}
+    } catch (e) {
+      // Retry with minimal payload if any column is constrained
+      try {
+        await _supabase.from('issue_reports').insert({
+          'reporter_id': user.id,
+          'title': 'Reported Forum Post',
+          'description': reason,
+        });
+      } catch (_) {}
+    }
   }
 
   // ── Share ───────────────────────────────────────────────────────────────

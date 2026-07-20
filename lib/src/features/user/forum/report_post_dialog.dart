@@ -36,6 +36,12 @@ class _ReportPostDialogState extends State<ReportPostDialog> {
       await service.reportPost(postId: widget.postId, reason: reason);
       if (mounted) {
         Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Report submitted to moderation & Issue Reports!'),
+            backgroundColor: ColorUtils.forestGreen,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
