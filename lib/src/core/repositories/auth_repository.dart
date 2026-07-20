@@ -169,15 +169,8 @@ class SupabaseAuthRepository implements AuthRepository {
       'p_contact_number': data.contactNumber,
     });
 
-    // 3. Create farm if farmer
-    if (data.role == UserRole.farmer && data.farm != null) {
-      await _supabase.rpc('create_farm', params: {
-        'p_owner_id': userId,
-        'p_farm_name': data.farm!.farmName,
-        'p_address': data.farm!.location,
-        'p_produce_types': [data.farm!.produceType],
-      });
-    }
+    // Note: Farm creation no longer happens here — it's done during
+    // onboarding Step 1 (FarmService.createFarm).
   }
 
   // ── Sign in ─────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/repositories/auth_repository.dart';
+import '../../../core/model/user_session.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 import '../../login/login_screen.dart';
@@ -15,7 +16,52 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  bool _isFarmer = true; // true = Farmer, false = Consumer
+  UserSession? _session;
+  bool _isLoading = true;
+  bool _isFarmer = false;
+  String _initials = '';
+  String _displayName = '';
+  String _location = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSession();
+  }
+
+  Future<void> _loadSession() async {
+    try {
+      final authRepo = context.read<AuthRepository>();
+      final session = await authRepo.getCurrentSession();
+      if (session != null && mounted) {
+        setState(() {
+          _session = session;
+          _isFarmer = session.role == 'farmer';
+          _isLoading = false;
+          _displayName = session.fullName.isNotEmpty
+              ? session.fullName
+              : 'Unknown User';
+          _location = session.farmAddress.isNotEmpty
+              ? session.farmAddress
+              : 'Location not set';
+          _initials = _buildInitials(session.fullName);
+        });
+      } else if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  String _buildInitials(String fullName) {
+    if (fullName.isEmpty) return '?';
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    }
+    return parts.first[0].toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,106 +75,109 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Scaffold(
         body: SafeArea(
           bottom: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Title ────────────────────────────────────────────
-                Text(
-                  'My Profile',
-                  style: AppTypography.heading3(
-                    color: ColorUtils.darkText,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Profile card ─────────────────────────────────────
-                _buildProfileCard(),
-                const SizedBox(height: 24),
-
-                // ── Account mode toggle ──────────────────────────────
-                Text(
-                  'Account Mode',
-                  style: AppTypography.subtitle1(
-                    color: ColorUtils.darkText,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildAccountModeToggle(),
-                const SizedBox(height: 8),
-                Text(
-                  _isFarmer
-                      ? "Switch anytime — you're currently browsing as a Farmer (seller)"
-                      : "Switch anytime — you're currently browsing as a Consumer (buyer)",
-                  style: AppTypography.bodySmall(
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // ── Stats row ────────────────────────────────────────
-                _buildStatsRow(),
-                const SizedBox(height: 24),
-
-                // ── Menu items ───────────────────────────────────────
-                _buildMenuItem(
-                  title: 'My Farm Listings',
-                  subtitle: '3 products listed',
-                ),
-                const SizedBox(height: 10),
-                _buildMenuItem(
-                  title: 'Batch Pooling Requests',
-                  subtitle: '1 active request',
-                ),
-                const SizedBox(height: 10),
-                _buildMenuItem(
-                  title: 'Issue Reports',
-                  subtitle: 'Report a problem to Admin',
-                ),
-                const SizedBox(height: 10),
-                _buildMenuItem(
-                  title: 'Order History',
-                  subtitle: '128 completed orders',
-                ),
-                const SizedBox(height: 10),
-                _buildMenuItem(
-                  title: 'Settings',
-                  subtitle: 'Notifications, privacy, help',
-                ),
-                const SizedBox(height: 20),
-
-                // ── Logout Button ────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _handleLogout(context),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFFD84040)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Title ─────────────────────────────────────
+                      Text(
+                        'My Profile',
+                        style: AppTypography.heading3(
+                          color: ColorUtils.darkText,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    icon: const Icon(
-                      LucideIcons.logOut,
-                      color: Color(0xFFD84040),
-                      size: 18,
-                    ),
-                    label: Text(
-                      'Log Out',
-                      style: AppTypography.button(
-                        color: const Color(0xFFD84040),
-                        fontWeight: FontWeight.w600,
+                      const SizedBox(height: 16),
+
+                      // ── Profile card (realtime) ───────────────────
+                      _buildProfileCard(),
+                      const SizedBox(height: 24),
+
+                      // ── Account mode toggle ───────────────────────
+                      Text(
+                        'Account Mode',
+                        style: AppTypography.subtitle1(
+                          color: ColorUtils.darkText,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 12),
+                      _buildAccountModeToggle(),
+                      const SizedBox(height: 8),
+                      Text(
+                        _isFarmer
+                            ? "Switch anytime — you're currently browsing as a Farmer (seller)"
+                            : "Switch anytime — you're currently browsing as a Consumer (buyer)",
+                        style: AppTypography.bodySmall(
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ── Stats row (static) ────────────────────────
+                      _buildStatsRow(),
+                      const SizedBox(height: 24),
+
+                      // ── Menu items (static) ───────────────────────
+                      _buildMenuItem(
+                        title: _isFarmer ? 'My Farm Listings' : 'My Orders',
+                        subtitle: _isFarmer ? '3 products listed' : '12 orders',
+                      ),
+                      const SizedBox(height: 10),
+                      _buildMenuItem(
+                        title: 'Batch Pooling Requests',
+                        subtitle: '1 active request',
+                      ),
+                      const SizedBox(height: 10),
+                      _buildMenuItem(
+                        title: 'Issue Reports',
+                        subtitle: 'Report a problem to Admin',
+                      ),
+                      const SizedBox(height: 10),
+                      _buildMenuItem(
+                        title: 'Order History',
+                        subtitle: '128 completed orders',
+                      ),
+                      const SizedBox(height: 10),
+                      _buildMenuItem(
+                        title: 'Settings',
+                        subtitle: 'Notifications, privacy, help',
+                      ),
+                      const SizedBox(height: 20),
+
+                      // ── Logout Button ─────────────────────────────
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _handleLogout(context),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFD84040)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          icon: const Icon(
+                            LucideIcons.logOut,
+                            color: Color(0xFFD84040),
+                            size: 18,
+                          ),
+                          label: Text(
+                            'Log Out',
+                            style: AppTypography.button(
+                              color: const Color(0xFFD84040),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
         ),
       ),
     );
@@ -139,7 +188,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Log Out'),
-        content: const Text('Are you sure you want to log out of HydroDok?'),
+        content:
+            const Text('Are you sure you want to log out of HydroDok?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -176,7 +226,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── Profile card ─────────────────────────────────────────────────────────
+  // ── Profile card (realtime from session) ────────────────────────────────
 
   Widget _buildProfileCard() {
     return Container(
@@ -188,17 +238,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       child: Row(
         children: [
-          // Avatar with initials
+          // Avatar with initials from session
           Container(
             width: 56,
             height: 56,
             decoration: const BoxDecoration(
-              color: Color(0xFFE8A020), // warm orange
+              color: ColorUtils.forestGreen,
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
             child: Text(
-              'MA',
+              _initials,
               style: AppTypography.heading4(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -206,42 +256,48 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(width: 14),
-
-          // Name, location, rating
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'MakMak Augh',
+                  _displayName,
                   style: AppTypography.subtitle1(
                     color: ColorUtils.darkText,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 2),
+                if (_isFarmer && _session?.farmName != null &&
+                    _session!.farmName.isNotEmpty) ...[
+                  Text(
+                    _session!.farmName,
+                    style: AppTypography.bodySmall(
+                      color: ColorUtils.forestGreen,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                ],
                 Text(
-                  'Taal, Calabarzon, PH',
+                  '${_session?.email ?? ''}',
                   style: AppTypography.bodySmall(
-                    color: Colors.grey.shade600,
+                    color: Colors.grey.shade500,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    ...List.generate(
-                      5,
-                      (_) => const Icon(
-                        Icons.star,
-                        size: 16,
-                        color: Color(0xFFE8A020),
-                      ),
-                    ),
+                    Icon(Icons.circle,
+                        size: 10,
+                        color: _isFarmer
+                            ? ColorUtils.forestGreen
+                            : Colors.blue),
                     const SizedBox(width: 6),
                     Text(
-                      '5.0',
+                      _isFarmer ? 'Farmer' : 'Consumer',
                       style: AppTypography.bodySmall(
-                        color: ColorUtils.darkText,
+                        color: Colors.grey.shade600,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -255,7 +311,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── Account mode toggle ──────────────────────────────────────────────────
+  // ── Account mode toggle ─────────────────────────────────────────────────
 
   Widget _buildAccountModeToggle() {
     return Container(
@@ -323,12 +379,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── Stats row ────────────────────────────────────────────────────────────
+  // ── Stats row (static) ──────────────────────────────────────────────────
 
   Widget _buildStatsRow() {
     return Row(
       children: [
-        _buildStatCard(value: '3', label: 'Active Listings'),
+        _buildStatCard(
+          value: _isFarmer ? '3' : '12',
+          label: _isFarmer ? 'Active Listings' : 'Orders',
+        ),
         const SizedBox(width: 10),
         _buildStatCard(value: '128', label: 'Orders Fulfilled'),
         const SizedBox(width: 10),
@@ -337,7 +396,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildStatCard({required String value, required String label}) {
+  Widget _buildStatCard(
+      {required String value, required String label}) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -369,7 +429,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // ── Menu items ───────────────────────────────────────────────────────────
+  // ── Menu items (static) ─────────────────────────────────────────────────
 
   Widget _buildMenuItem({
     required String title,
