@@ -185,17 +185,40 @@ class SupabaseAuthRepository implements AuthRepository {
       throw Exception('Invalid email or password');
     }
 
+    final userId = response.user!.id;
+    final profile = await _supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+
+    final role = (profile?['role'] as String? ?? 'consumer').toLowerCase();
+
+    // Platform-based Role Access Control:
+    // - Web: Admin ONLY
+    // - Mobile: Users (Farmer/Consumer) ONLY
+    if (kIsWeb && role != 'admin') {
+      await _supabase.auth.signOut();
+      throw Exception(
+        'Web portal access is reserved for Admin accounts only. Please log in using the Hydrodok Mobile App.',
+      );
+    }
+
+    if (!kIsWeb && role == 'admin') {
+      await _supabase.auth.signOut();
+      throw Exception(
+        'Admin accounts must log in via the Web Admin Panel. Mobile app access is for Farmers and Consumers.',
+      );
+    }
+
     // Backfill avatar_url for existing users whose profile still has null.
-    // This ensures everyone gets a default avatar after the storage RLS
-    // migration — runs right after login while the session is definitely active.
     try {
-      final userId = response.user!.id;
-      final profile = await _supabase
+      final avatarProfile = await _supabase
           .from('profiles')
           .select('avatar_url')
           .eq('id', userId)
           .maybeSingle();
-      final avatarUrl = profile?['avatar_url'] as String?;
+      final avatarUrl = avatarProfile?['avatar_url'] as String?;
       if (avatarUrl == null || avatarUrl.isEmpty) {
         await AvatarBackfill.setDefaultAvatar(_supabase, userId: userId);
       }
@@ -234,6 +257,18 @@ class SupabaseAuthRepository implements AuthRepository {
     }
 
     if (result == null) return null;
+
+    final role = (result['role'] as String? ?? 'consumer').toLowerCase();
+
+    // Enforce platform session guard
+    if (kIsWeb && role != 'admin') {
+      await _supabase.auth.signOut();
+      return null;
+    }
+    if (!kIsWeb && role == 'admin') {
+      await _supabase.auth.signOut();
+      return null;
+    }
 
     // Try to fetch farm details (silently skip if not a farmer).
     String farmName = '';

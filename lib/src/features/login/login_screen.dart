@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/login/login_bloc.dart';
@@ -10,8 +11,6 @@ import '../../core/utils/typography.dart';
 import '../../widget/custom_button.dart';
 import '../../widget/custom_text_field.dart';
 import '../../widget/logo_widget.dart';
-import '../admin/admin_shell.dart';
-import '../main_shell.dart';
 import '../onboarding/onboarding_gate.dart';
 import '../register/register_screen.dart';
 
@@ -102,7 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // ── Heading ─────────────────────────────────────
                       Text(
-                        'Welcome back',
+                        kIsWeb ? 'Admin Portal' : 'Welcome back',
                         style: AppTypography.heading3(
                           color: ColorUtils.pureWhite,
                         ),
@@ -110,7 +109,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Sign in to your account',
+                        kIsWeb
+                            ? 'Sign in with your Admin credentials'
+                            : 'Sign in to your account',
                         style: AppTypography.bodyMedium(
                           color: ColorUtils.pureWhite.withValues(alpha: 0.6),
                         ),
@@ -168,33 +169,35 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // ── Link to Register ───────────────────────────
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            "Don't have an account? ",
-                            style: AppTypography.bodyMedium(
-                              color: ColorUtils.pureWhite.withValues(alpha: 0.6),
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const RegisterScreen(),
-                              ),
-                            ),
-                            child: Text(
-                              'Sign up',
+                      // ── Link to Register (Mobile only) ────────────────
+                      if (!kIsWeb) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "Don't have an account? ",
                               style: AppTypography.bodyMedium(
-                                color: ColorUtils.primary,
-                                fontWeight: FontWeight.w600,
+                                color: ColorUtils.pureWhite.withValues(alpha: 0.6),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
+                            GestureDetector(
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const RegisterScreen(),
+                                ),
+                              ),
+                              child: Text(
+                                'Sign up',
+                                style: AppTypography.bodyMedium(
+                                  color: ColorUtils.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       // ── DEV: Skip to App ──────────────────────────────
                       /*
