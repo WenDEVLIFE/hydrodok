@@ -245,16 +245,19 @@ class _FarmMapPickerDialogState extends State<FarmMapPickerDialog> {
                       separatorBuilder: (_, __) => const Divider(color: Colors.white12, height: 1),
                       itemBuilder: (ctx, index) {
                         final item = _searchResults[index];
-                        return ListTile(
-                          dense: true,
-                          leading: const Icon(LucideIcons.mapPin, color: ColorUtils.sageGreen, size: 20),
-                          title: Text(
-                            item['display_name'],
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.bodySmall(color: ColorUtils.pureWhite),
+                        return Material(
+                          color: Colors.transparent,
+                          child: ListTile(
+                            dense: true,
+                            leading: const Icon(LucideIcons.mapPin, color: ColorUtils.sageGreen, size: 20),
+                            title: Text(
+                              item['display_name'],
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.bodySmall(color: ColorUtils.pureWhite),
+                            ),
+                            onTap: () => _selectSearchResult(item),
                           ),
-                          onTap: () => _selectSearchResult(item),
                         );
                       },
                     ),

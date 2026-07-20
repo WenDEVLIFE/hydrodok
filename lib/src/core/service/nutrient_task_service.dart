@@ -132,14 +132,41 @@ class NutrientTaskService {
           .eq('farm_id', farmId)
           .order('created_at', ascending: false);
 
-      return List<Map<String, dynamic>>.from(response);
-    } catch (_) {
+      final list = List<Map<String, dynamic>>.from(response);
+      if (list.isNotEmpty) return list;
+    } catch (_) {}
+
+    try {
       final response = await _supabase
           .from('farm_tasks')
           .select('*')
           .eq('farm_id', farmId);
 
-      return List<Map<String, dynamic>>.from(response);
+      final list = List<Map<String, dynamic>>.from(response);
+      if (list.isNotEmpty) return list;
+    } catch (_) {}
+
+    // Fallback: try `tasks` table with farm_id or farmer_id (per database.md)
+    try {
+      final response = await _supabase
+          .from('tasks')
+          .select('*')
+          .eq('farm_id', farmId);
+      final list = List<Map<String, dynamic>>.from(response);
+      if (list.isNotEmpty) return list;
+    } catch (_) {}
+
+    final user = _supabase.auth.currentUser;
+    if (user != null) {
+      try {
+        final response = await _supabase
+            .from('tasks')
+            .select('*')
+            .eq('farmer_id', user.id);
+        return List<Map<String, dynamic>>.from(response);
+      } catch (_) {}
     }
+
+    return [];
   }
 }

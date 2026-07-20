@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart' hide Path;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/repositories/issue_report_repository.dart';
 import '../../core/repositories/nutrient_task_repository.dart';
 import '../../core/service/product_service.dart';
 import '../../core/utils/color_utils.dart';
@@ -36,24 +37,55 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
   int _currentTabIndex = 0;
 
   late final NutrientTaskRepository _nutrientTaskRepo;
+  late final IssueReportRepository _issueReportRepo;
 
   // ── Realtime streams ─────────────────────────────────────────────────────
   late final Stream<List<Map<String, dynamic>>> _farmStream;
   late final Stream<List<Map<String, dynamic>>> _productsStream;
   late final Stream<List<Map<String, dynamic>>> _ordersStream;
+  late final Stream<List<Map<String, dynamic>>> _issueReportsStream;
 
   // ── Products, Orders, Tasks & Nutrient Logs ─────────────────────────────
   List<Map<String, dynamic>> _myProducts = [];
   List<Map<String, dynamic>> _myOrders = [];
   List<Map<String, dynamic>> _myTasks = [];
   List<Map<String, dynamic>> _myNutrientLogs = [];
+  // ── Initial Farm State ──────────────────────────────────────────────────
+  Map<String, dynamic>? _initialFarm;
 
   @override
   void initState() {
     super.initState();
     _nutrientTaskRepo = SupabaseNutrientTaskRepository();
+    _issueReportRepo = IssueReportRepository();
     _initStream();
+    _loadInitialFarmAndData();
     _loadProductsAndOrders();
+  }
+
+  Future<void> _loadInitialFarmAndData() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final res = await Supabase.instance.client
+          .from('farms')
+          .select('*')
+          .eq('owner_id', user.id)
+          .maybeSingle();
+
+      if (res != null && mounted) {
+        setState(() {
+          _initialFarm = res;
+        });
+        final farmId = res['id'] as String?;
+        if (farmId != null) {
+          _loadTasksAndLogs(farmId);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading initial farm REST: $e');
+    }
   }
 
   void _initStream() {
@@ -76,6 +108,8 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
         .from('orders')
         .stream(primaryKey: ['id'])
         .order('created_at', ascending: false);
+
+    _issueReportsStream = _issueReportRepo.watchIssueReports();
   }
 
   Future<void> _loadProductsAndOrders() async {
@@ -191,13 +225,13 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
         body: StreamBuilder<List<Map<String, dynamic>>>(
           stream: _farmStream,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
+            if (snapshot.connectionState == ConnectionState.waiting && _initialFarm == null) {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final farm = snapshot.data?.isNotEmpty == true
+            final farm = (snapshot.data?.isNotEmpty == true
                 ? snapshot.data!.first
-                : null;
+                : null) ?? _initialFarm;
             final farmName = farm?['farm_name'] as String? ?? 'No Farm Registered';
             final farmAddress = farm?['address'] as String? ?? '';
             final verificationStatus = farm?['verification_status'] as String? ?? 'unverified';
@@ -250,19 +284,76 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                             icon: LucideIcons.leaf,
                             color: ColorUtils.forestGreen,
                           ),
-                          _buildMetricCard(
-                            title: 'Tasks',
-                            value: '—',
-                            subtitle: 'Task manager coming soon',
-                            icon: LucideIcons.checkSquare,
-                            color: ColorUtils.terracotta,
+                          StreamBuilder<List<Map<String, dynamic>>>(
+                            stream: (farm?['id'] as String?) != null
+                                ? _nutrientTaskRepo.watchFarmTasks(farm!['id'] as String)
+                                : null,
+                            builder: (context, taskSnap) {
+                              final tasks = (taskSnap.hasData && taskSnap.data!.isNotEmpty)
+                                  ? taskSnap.data!
+                                  : _myTasks;
+                              final pendingCount = tasks.where((t) => t['status'] != 'completed').length;
+                              final completedCount = tasks.where((t) => t['status'] == 'completed').length;
+                              final val = tasks.isEmpty
+                                  ? '0 Tasks'
+                                  : '$pendingCount Pending';
+                              final sub = tasks.isEmpty
+                                  ? 'Tap to add maintenance task'
+                                  : '$completedCount of ${tasks.length} completed';
+
+                              return GestureDetector(
+                                onTap: () {
+                                  final farmId = farm?['id'] as String?;
+                                  if (farmId != null) _showAddTaskDialog(farmId);
+                                },
+                                child: _buildMetricCard(
+                                  title: 'Tasks',
+                                  value: val,
+                                  subtitle: sub,
+                                  icon: LucideIcons.checkSquare,
+                                  color: ColorUtils.terracotta,
+                                ),
+                              );
+                            },
                           ),
-                          _buildMetricCard(
-                            title: 'Issue Alerts',
-                            value: '0 Active',
-                            subtitle: 'All systems operational',
-                            icon: LucideIcons.shieldCheck,
-                            color: const Color(0xFF81C784),
+                          StreamBuilder<List<Map<String, dynamic>>>(
+                            stream: _issueReportsStream,
+                            builder: (context, issueSnap) {
+                              final allIssues = issueSnap.data ?? [];
+                              final farmId = farm?['id'] as String?;
+                              final user = Supabase.instance.client.auth.currentUser;
+
+                              final myIssues = allIssues.where((i) {
+                                final isMyFarm = farmId != null && i['farm_id'] == farmId;
+                                final isMyReport = user != null && i['reporter_id'] == user.id;
+                                final status = (i['status'] as String? ?? '').toLowerCase();
+                                return (isMyFarm || isMyReport) && status != 'resolved';
+                              }).toList();
+
+                              final activeCount = myIssues.length;
+                              final val = '$activeCount Active';
+                              final sub = activeCount == 0
+                                  ? 'All systems operational'
+                                  : '$activeCount unresolved issue report${activeCount > 1 ? 's' : ''}';
+                              final color = activeCount == 0
+                                  ? const Color(0xFF81C784)
+                                  : ColorUtils.terracotta;
+
+                              return GestureDetector(
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const IssueReportsScreen()),
+                                  );
+                                },
+                                child: _buildMetricCard(
+                                  title: 'Issue Alerts',
+                                  value: val,
+                                  subtitle: sub,
+                                  icon: activeCount == 0 ? LucideIcons.shieldCheck : LucideIcons.alertTriangle,
+                                  color: color,
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
@@ -375,9 +466,11 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                             ? _nutrientTaskRepo.watchFarmTasks(farm!['id'] as String)
                             : null,
                         builder: (context, taskSnapshot) {
-                          final tasksList = taskSnapshot.data ?? _myTasks;
+                          final tasksList = (taskSnapshot.hasData && taskSnapshot.data!.isNotEmpty)
+                              ? taskSnapshot.data!
+                              : _myTasks;
                           if (tasksList.isEmpty) {
-                            return Center(child: Text("No tasks."));
+                            return _buildEmptyState('No maintenance tasks scheduled. Tap "Add Task" to create one.');
                           }
 
                           return Column(
@@ -399,6 +492,30 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                                   final nextStatus = isCompleted ? 'pending' : 'completed';
                                   await _nutrientTaskRepo.updateTaskStatus(taskId, nextStatus);
                                   if (farmId != null) _loadTasksAndLogs(farmId);
+                                },
+                                onDelete: () async {
+                                  final confirm = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Delete Task'),
+                                      content: Text('Are you sure you want to delete "$title"?'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.of(ctx).pop(false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                                          onPressed: () => Navigator.of(ctx).pop(true),
+                                          child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (confirm == true) {
+                                    await _nutrientTaskRepo.deleteTask(taskId);
+                                    if (farmId != null) _loadTasksAndLogs(farmId);
+                                  }
                                 },
                               );
                             }).toList(),
@@ -1293,6 +1410,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
     required String subtitle,
     required bool isDone,
     VoidCallback? onToggle,
+    VoidCallback? onDelete,
     String? priority,
   }) {
     Color priorityColor = Colors.grey;
@@ -1302,7 +1420,6 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -1319,74 +1436,79 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
           ),
         ],
       ),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: onToggle,
-            child: Icon(
-              isDone ? LucideIcons.checkCircle2 : LucideIcons.circle,
-              color: isDone ? ColorUtils.forestGreen : Colors.grey.shade300,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: AppTypography.bodyMedium(
-                          color: ColorUtils.darkText,
-                          fontWeight: FontWeight.w600,
-                        ).copyWith(
-                          decoration: isDone ? TextDecoration.lineThrough : null,
-                        ),
-                      ),
-                    ),
-                    if (priority != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: priorityColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: priorityColor, width: 0.5),
-                        ),
-                        child: Text(
-                          priority.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            color: priorityColor,
-                          ),
-                        ),
-                      ),
-                  ],
+                Icon(
+                  isDone ? LucideIcons.checkCircle2 : LucideIcons.circle,
+                  color: isDone ? ColorUtils.forestGreen : Colors.grey.shade300,
+                  size: 24,
                 ),
-                if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: AppTypography.bodyMedium(
+                                color: ColorUtils.darkText,
+                                fontWeight: FontWeight.w600,
+                              ).copyWith(
+                                decoration: isDone ? TextDecoration.lineThrough : null,
+                              ),
+                            ),
+                          ),
+                          if (priority != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: priorityColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: priorityColor, width: 0.5),
+                              ),
+                              child: Text(
+                                priority.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: priorityColor,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (onDelete != null) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: Icon(LucideIcons.trash2, size: 18, color: Colors.grey.shade400),
+                    onPressed: onDelete,
                   ),
                 ],
               ],
             ),
           ),
-          if (time.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Text(
-              time,
-              style: AppTypography.bodySmall(
-                color: ColorUtils.forestGreen,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
