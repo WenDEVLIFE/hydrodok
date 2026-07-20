@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/repositories/issue_report_repository.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 import '../../../widget/widgets.dart';
 
 class IssueReportsScreen extends StatefulWidget {
-  const IssueReportsScreen({super.key});
+  final IssueReportRepository? repository;
+
+  const IssueReportsScreen({super.key, this.repository});
 
   @override
   State<IssueReportsScreen> createState() => _IssueReportsScreenState();
 }
 
 class _IssueReportsScreenState extends State<IssueReportsScreen> {
+  late final IssueReportRepository _repository;
   String _activeFilter = 'All'; // All | Open | Resolved
   final _searchController = TextEditingController();
 
@@ -24,10 +27,8 @@ class _IssueReportsScreenState extends State<IssueReportsScreen> {
   @override
   void initState() {
     super.initState();
-    _reportsStream = Supabase.instance.client
-        .from('issue_reports')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false);
+    _repository = widget.repository ?? IssueReportRepository();
+    _reportsStream = _repository.watchIssueReports();
   }
 
   @override
@@ -37,47 +38,31 @@ class _IssueReportsScreenState extends State<IssueReportsScreen> {
   }
 
   Future<void> _fetchMetaForReports(List<Map<String, dynamic>> reports) async {
-    final supabase = Supabase.instance.client;
     for (final r in reports) {
       final reporterId = r['reporter_id'] as String?;
       final farmId = r['farm_id'] as String?;
 
       if (reporterId != null && !_reporterNames.containsKey(reporterId)) {
-        try {
-          final prof = await supabase
-              .from('profiles')
-              .select('full_name')
-              .eq('id', reporterId)
-              .maybeSingle();
-          if (prof != null && prof['full_name'] != null) {
-            _reporterNames[reporterId] = prof['full_name'] as String;
-            if (mounted) setState(() {});
-          }
-        } catch (_) {}
+        final name = await _repository.getReporterName(reporterId);
+        if (name != null) {
+          _reporterNames[reporterId] = name;
+          if (mounted) setState(() {});
+        }
       }
 
       if (farmId != null && !_farmNames.containsKey(farmId)) {
-        try {
-          final farm = await supabase
-              .from('farms')
-              .select('farm_name')
-              .eq('id', farmId)
-              .maybeSingle();
-          if (farm != null && farm['farm_name'] != null) {
-            _farmNames[farmId] = farm['farm_name'] as String;
-            if (mounted) setState(() {});
-          }
-        } catch (_) {}
+        final name = await _repository.getFarmName(farmId);
+        if (name != null) {
+          _farmNames[farmId] = name;
+          if (mounted) setState(() {});
+        }
       }
     }
   }
 
   Future<void> _updateReportStatus(String reportId, String newStatus) async {
     try {
-      await Supabase.instance.client
-          .from('issue_reports')
-          .update({'status': newStatus})
-          .eq('id', reportId);
+      await _repository.updateReportStatus(reportId, newStatus);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

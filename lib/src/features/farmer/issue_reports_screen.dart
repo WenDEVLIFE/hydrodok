@@ -2,49 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/repositories/issue_report_repository.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import '../../widget/widgets.dart';
 
 /// Screen for farmers to report hardware/system issues and view ticket status
 class IssueReportsScreen extends StatefulWidget {
-  const IssueReportsScreen({super.key});
+  final IssueReportRepository? repository;
+
+  const IssueReportsScreen({super.key, this.repository});
 
   @override
   State<IssueReportsScreen> createState() => _IssueReportsScreenState();
 }
 
 class _IssueReportsScreenState extends State<IssueReportsScreen> {
+  late final IssueReportRepository _repository;
   late final Stream<List<Map<String, dynamic>>> _reportsStream;
 
-  final List<Map<String, dynamic>> _issueTickets = [
-    {
-      'id': 'ticket-101',
-      'category': 'Water System / Pump',
-      'title': 'Submersible Pump Flow Fluctuation in NFT Channel #2',
-      'description': 'Water flow rate dropped to 1.2 L/min causing dry roots on upper channel.',
-      'priority': 'high',
-      'status': 'in_progress',
-      'created_at': '2026-07-19',
-    },
-    {
-      'id': 'ticket-102',
-      'category': 'Nutrient & Water Quality',
-      'title': 'EC Meter Sensor Calibration Drift',
-      'description': 'EC reading fluctuates between 1.2 and 2.4 mS/cm rapidly.',
-      'priority': 'medium',
-      'status': 'under_review',
-      'created_at': '2026-07-18',
-    },
-  ];
+  final List<Map<String, dynamic>> _issueTickets = [];
 
   @override
   void initState() {
     super.initState();
-    _reportsStream = Supabase.instance.client
-        .from('issue_reports')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: false);
+    _repository = widget.repository ?? IssueReportRepository();
+    _reportsStream = _repository.watchIssueReports();
   }
 
   void _showReportIssueModal() {
@@ -151,23 +134,23 @@ class _IssueReportsScreenState extends State<IssueReportsScreen> {
                       final desc = descController.text.trim();
                       if (title.isEmpty) return;
 
-                      final user = Supabase.instance.client.auth.currentUser;
-
-                      final reportPayload = {
-                        if (user != null) 'reporter_id': user.id,
-                        'category': selectedCategory,
-                        'title': title,
-                        'description': desc,
-                        'priority': selectedPriority,
-                        'status': 'under_review',
-                        'created_at': DateTime.now().toIso8601String(),
-                      };
-
                       try {
-                        await Supabase.instance.client.from('issue_reports').insert(reportPayload);
+                        await _repository.createIssueReport(
+                          title: title,
+                          description: desc,
+                          category: selectedCategory,
+                          priority: selectedPriority,
+                        );
                       } catch (_) {
                         setState(() {
-                          _issueTickets.insert(0, reportPayload);
+                          _issueTickets.insert(0, {
+                            'category': selectedCategory,
+                            'title': title,
+                            'description': desc,
+                            'priority': selectedPriority,
+                            'status': 'under_review',
+                            'created_at': DateTime.now().toIso8601String(),
+                          });
                         });
                       }
 
