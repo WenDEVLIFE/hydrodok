@@ -1,0 +1,75 @@
+-- =============================================================================
+--  Create batch pooling tables (batch_pools + batch_members)
+--  Run this in Supabase SQL Editor.
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.batch_pools (
+  id              uuid primary key default gen_random_uuid(),
+  title           text not null,
+  crop_name       text not null,
+  target_quantity numeric(12,2) not null default 0,
+  current_quantity numeric(12,2) not null default 0,
+  target_price    numeric(12,2) default 0,
+  status          text not null default 'Open',
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+-- Add missing columns if the table already existed without them.
+ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS created_by uuid references auth.users(id) on delete set null;
+ALTER TABLE public.batch_pools ADD COLUMN IF NOT EXISTS deadline date;
+
+CREATE TABLE IF NOT EXISTS public.batch_members (
+  id          uuid primary key default gen_random_uuid(),
+  batch_id    uuid not null references public.batch_pools(id) on delete cascade,
+  farmer_id   uuid not null references auth.users(id) on delete cascade,
+  quantity    numeric(12,2) not null default 0,
+  created_at  timestamptz not null default now(),
+  unique(batch_id, farmer_id)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_batch_pools_status ON public.batch_pools(status);
+CREATE INDEX IF NOT EXISTS idx_batch_pools_created_by ON public.batch_pools(created_by);
+CREATE INDEX IF NOT EXISTS idx_batch_members_batch_id ON public.batch_members(batch_id);
+CREATE INDEX IF NOT EXISTS idx_batch_members_farmer_id ON public.batch_members(farmer_id);
+
+-- RLS
+ALTER TABLE public.batch_pools ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.batch_members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read batch pools" ON public.batch_pools;
+DROP POLICY IF EXISTS "Creators manage batch pools" ON public.batch_pools;
+DROP POLICY IF EXISTS "Public read batch members" ON public.batch_members;
+DROP POLICY IF EXISTS "Farmers contribute to batch members" ON public.batch_members;
+
+CREATE POLICY "Public read batch pools"
+  ON public.batch_pools FOR select
+  USING (true);
+
+CREATE POLICY "Creators manage batch pools"
+  ON public.batch_pools FOR all
+  USING (created_by = auth.uid());
+
+CREATE POLICY "Public read batch members"
+  ON public.batch_members FOR select
+  USING (true);
+
+CREATE POLICY "Farmers contribute to batch members"
+  ON public.batch_members FOR insert
+  WITH CHECK (farmer_id = auth.uid());
+
+-- Trigger to update updated_at on batch_pools
+CREATE OR REPLACE FUNCTION public.update_batch_pool_updated_at()
+RETURNS trigger AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_batch_pools_updated_at ON public.batch_pools;
+CREATE TRIGGER trg_batch_pools_updated_at
+  BEFORE UPDATE ON public.batch_pools
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_batch_pool_updated_at();

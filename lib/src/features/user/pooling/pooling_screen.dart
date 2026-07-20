@@ -1,47 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
-// ── Data ────────────────────────────────────────────────────────────────────
 
-class PoolingRequest {
-  final String initials;
-  final String name;
-  final String farmName;
-  final String distance;
-  final String need;
+/// Client/Consumer Batch Pooling Screen:
+/// Shows active collective produce pooling campaigns.
+class PoolingScreen extends StatefulWidget {
+  const PoolingScreen({super.key});
 
-  const PoolingRequest({
-    required this.initials,
-    required this.name,
-    required this.farmName,
-    required this.distance,
-    required this.need,
-  });
+  @override
+  State<PoolingScreen> createState() => _PoolingScreenState();
 }
 
-const _helpRequests = <PoolingRequest>[
-  PoolingRequest(
-    initials: 'M',
-    name: 'Mario Reyes',
-    farmName: 'Mahogany Farm',
-    distance: '1.2 km away',
-    need: 'Needs 2,000 units tomatoes',
-  ),
-  PoolingRequest(
-    initials: 'B',
-    name: 'Ben Torres',
-    farmName: 'Sta. Nino Urban Farm',
-    distance: '3.5 km away',
-    need: 'Needs 800 units bell pepper',
-  ),
-];
+class _PoolingScreenState extends State<PoolingScreen> {
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _batchPools = [];
 
-// ── Screen ──────────────────────────────────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    _loadPools();
+  }
 
-class PoolingScreen extends StatelessWidget {
-  const PoolingScreen({super.key});
+  Future<void> _loadPools() async {
+    setState(() => _isLoading = true);
+    try {
+      final response = await Supabase.instance.client
+          .from('batch_pools')
+          .select('*, batch_members(*)')
+          .order('created_at', ascending: false);
+
+      final pools = List<Map<String, dynamic>>.from(response);
+      if (mounted) {
+        setState(() {
+          _batchPools = pools;
+          _isLoading = false;
+        });
+      }
+    } catch (e, stack) {
+      debugPrint('PoolingScreen load error: $e');
+      debugPrint(stack.toString());
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load pooling campaigns: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,54 +63,83 @@ class PoolingScreen extends StatelessWidget {
       child: Scaffold(
         body: SafeArea(
           bottom: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Title ──────────────────────────────────────────────
-                Text(
-                  'Batch Pooling',
-                  style: AppTypography.heading3(
-                    color: ColorUtils.darkText,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Info banner ────────────────────────────────────────
-                _buildInfoBanner(),
-                const SizedBox(height: 24),
-
-                // ── Active request ────────────────────────────────────
-                Text(
-                  'Your Active Request',
-                  style: AppTypography.subtitle1(
-                    color: ColorUtils.darkText,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildActiveRequest(),
-                const SizedBox(height: 28),
-
-                // ── Help requests ─────────────────────────────────────
-                Text(
-                  'Requests You Can Help With',
-                  style: AppTypography.subtitle1(
-                    color: ColorUtils.darkText,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ...List.generate(_helpRequests.length, (i) {
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      bottom: i < _helpRequests.length - 1 ? 10 : 0,
+          child: RefreshIndicator(
+            onRefresh: _loadPools,
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Batch Pooling',
+                          style: AppTypography.heading3(
+                            color: ColorUtils.darkText,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildInfoBanner(),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Active Pooling Campaigns',
+                          style: AppTypography.subtitle1(
+                            color: ColorUtils.darkText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                     ),
-                    child: _HelpRequestCard(request: _helpRequests[i]),
-                  );
-                }),
+                  ),
+                ),
+
+                if (_isLoading)
+                  const SliverFillRemaining(
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_batchPools.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(LucideIcons.users, size: 48, color: Colors.grey.shade400),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No active pooling campaigns',
+                            style: AppTypography.bodyLarge(
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Farmers can create pools from the farmer dashboard.',
+                            style: AppTypography.bodySmall(color: Colors.grey.shade500),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index < _batchPools.length - 1 ? 12 : 0,
+                          ),
+                          child: _PoolCard(pool: _batchPools[index]),
+                        ),
+                        childCount: _batchPools.length,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -110,8 +147,6 @@ class PoolingScreen extends StatelessWidget {
       ),
     );
   }
-
-  // ── Info banner ──────────────────────────────────────────────────────────
 
   Widget _buildInfoBanner() {
     return Container(
@@ -128,9 +163,9 @@ class PoolingScreen extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
+          const Icon(
             LucideIcons.layoutGrid,
-            color: const Color(0xFF2979FF),
+            color: Color(0xFF2979FF),
             size: 22,
           ),
           const SizedBox(width: 12),
@@ -139,7 +174,7 @@ class PoolingScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Short on stock for a big order?',
+                  'Collective farmer orders',
                   style: AppTypography.subtitle2(
                     color: ColorUtils.darkText,
                     fontWeight: FontWeight.w600,
@@ -147,7 +182,7 @@ class PoolingScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Request nearby farmers to pool their harvest so you can fulfill it together.',
+                  'Farmers pool their harvest to fulfill larger orders. You can view live progress here.',
                   style: AppTypography.bodySmall(
                     color: Colors.grey.shade600,
                   ),
@@ -159,136 +194,29 @@ class PoolingScreen extends StatelessWidget {
       ),
     );
   }
-
-  // ── Active request card ──────────────────────────────────────────────────
-
-  Widget _buildActiveRequest() {
-    const int needed = 15000;
-    const int inStock = 10000;
-    const int shortBy = needed - inStock;
-    final double progress = inStock / needed;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: ColorUtils.terracotta.withValues(alpha: 0.5),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Lettuce order: ${_fmt(needed)} units needed',
-            style: AppTypography.subtitle2(
-              color: ColorUtils.darkText,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'You have ${_fmt(inStock)} in stock — short by ${_fmt(shortBy)} units',
-            style: AppTypography.bodySmall(
-              color: Colors.grey.shade600,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Progress bar + percentage
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: progress,
-                    minHeight: 10,
-                    backgroundColor: Colors.grey.shade200,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      ColorUtils.terracotta,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                '${(progress * 100).round()}%',
-                style: AppTypography.bodySmall(
-                  color: ColorUtils.darkText,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Footer row
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '2 farmers already offered to help',
-                  style: AppTypography.bodySmall(
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  // TODO: navigate to offers
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: ColorUtils.forestGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
-                  ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  'View Offers',
-                  style: AppTypography.button(
-                    color: Colors.white,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _fmt(int n) {
-    if (n >= 1000) {
-      final thousands = n ~/ 1000;
-      final remainder = n % 1000;
-      if (remainder == 0) return '$thousands,000';
-      return '$thousands,${remainder.toString().padLeft(3, '0')}';
-    }
-    return n.toString();
-  }
 }
 
-// ── Help request card ──────────────────────────────────────────────────────
-
-class _HelpRequestCard extends StatelessWidget {
-  final PoolingRequest request;
-  const _HelpRequestCard({required this.request});
+class _PoolCard extends StatelessWidget {
+  final Map<String, dynamic> pool;
+  const _PoolCard({required this.pool});
 
   @override
   Widget build(BuildContext context) {
+    final title = pool['title'] as String? ?? 'Collective Batch Pool';
+    final crop = pool['crop_name'] as String? ?? pool['crop'] as String? ?? 'Produce';
+    final target = (pool['target_quantity'] as num?)?.toDouble() ??
+        (pool['target_weight'] as num?)?.toDouble() ?? 100.0;
+    final current = (pool['current_quantity'] as num?)?.toDouble() ??
+        (pool['current_weight'] as num?)?.toDouble() ?? 0.0;
+    final price = (pool['target_price'] as num?)?.toDouble() ?? 0.0;
+    final members = List<Map<String, dynamic>>.from(pool['batch_members'] as List<dynamic>? ?? []);
+    final participants = members.length;
+    final status = (pool['status'] as String? ?? 'Open').toLowerCase();
+    final isFilled = status == 'filled' || current >= target;
+    final progress = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
+
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -297,85 +225,85 @@ class _HelpRequestCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Avatar + name row
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                width: 40,
-                height: 40,
-                decoration: const BoxDecoration(
-                  color: ColorUtils.forestGreen,
-                  shape: BoxShape.circle,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: ColorUtils.forestGreen.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                alignment: Alignment.center,
                 child: Text(
-                  request.initials,
-                  style: AppTypography.bodyMedium(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+                  crop,
+                  style: AppTypography.bodySmall(
+                    color: ColorUtils.forestGreen,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      request.name,
-                      style: AppTypography.subtitle2(
-                        color: ColorUtils.darkText,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${request.farmName} · ${request.distance}',
-                      style: AppTypography.bodySmall(
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isFilled ? ColorUtils.sageGreen.withOpacity(0.2) : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  isFilled ? 'GOAL MET' : status.toUpperCase(),
+                  style: TextStyle(
+                    color: isFilled ? ColorUtils.forestGreen : Colors.orange.shade800,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: AppTypography.bodyMedium(
+              color: ColorUtils.darkText,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 8,
+              backgroundColor: Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isFilled ? ColorUtils.sageGreen : ColorUtils.forestGreen,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${current.toInt()} / ${target.toInt()} kg (${(progress * 100).toStringAsFixed(0)}%)',
+                style: AppTypography.bodySmall(color: Colors.grey.shade600),
+              ),
+              Text(
+                'PHP ${price.toStringAsFixed(0)} / kg',
+                style: AppTypography.bodySmall(
+                  color: ColorUtils.forestGreen,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-
-          // Need + CTA
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  request.need,
-                  style: AppTypography.bodySmall(
-                    color: ColorUtils.darkText,
-                  ),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  // TODO: offer stock flow
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: ColorUtils.forestGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
-                  ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  'Offer Stock',
-                  style: AppTypography.button(
-                    color: Colors.white,
-                    fontSize: 12,
-                  ),
-                ),
+              const Icon(LucideIcons.users, size: 16, color: Colors.grey),
+              const SizedBox(width: 4),
+              Text(
+                '$participants farmer${participants == 1 ? '' : 's'} joined',
+                style: AppTypography.bodySmall(color: Colors.grey.shade600),
               ),
             ],
           ),
