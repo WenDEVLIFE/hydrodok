@@ -7,6 +7,15 @@
 alter table public.farms
   add column if not exists rejection_reason text;
 
+alter table public.farms
+  add column if not exists status text default 'active';
+
+alter table public.farms
+  add column if not exists verification_status text default 'unverified';
+
+alter table public.farms
+  add column if not exists verification_doc_url text;
+
 alter table public.profiles
   add column if not exists onboarding_completed boolean default false;
 
@@ -181,3 +190,63 @@ create policy "Users can delete their own avatar"
     and auth.role() = 'authenticated'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+--  7. Products Table & RLS Policies
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create table if not exists public.products (
+  id uuid primary key default gen_random_uuid(),
+  farmer_id uuid references public.profiles(id) on delete cascade,
+  farm_id uuid references public.farms(id) on delete cascade,
+  name text not null,
+  description text,
+  price_per_kg numeric default 0,
+  unit text default 'kg',
+  stock_quantity integer default 0,
+  image_url text default '',
+  status text default 'pending',
+  rejection_reason text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Ensure all columns exist on products table if table was created previously
+alter table public.products
+  add column if not exists farmer_id uuid,
+  add column if not exists farm_id uuid,
+  add column if not exists name text,
+  add column if not exists description text,
+  add column if not exists price_per_kg numeric default 0,
+  add column if not exists unit text default 'kg',
+  add column if not exists stock_quantity integer default 0,
+  add column if not exists image_url text default '',
+  add column if not exists status text default 'pending',
+  add column if not exists rejection_reason text;
+
+alter table public.products enable row level security;
+
+drop policy if exists "Farmers can insert own products" on public.products;
+create policy "Farmers can insert own products"
+  on public.products for insert
+  with check (auth.uid() = farmer_id or auth.role() = 'authenticated');
+
+drop policy if exists "Farmers, Consumers, and Admins view products" on public.products;
+create policy "Farmers, Consumers, and Admins view products"
+  on public.products for select
+  using (
+    auth.uid() = farmer_id
+    or status = 'approved'
+    or public.is_admin()
+  );
+
+drop policy if exists "Farmers and Admins update products" on public.products;
+create policy "Farmers and Admins update products"
+  on public.products for update
+  using (auth.uid() = farmer_id or public.is_admin());
+
+drop policy if exists "Farmers and Admins delete products" on public.products;
+create policy "Farmers and Admins delete products"
+  on public.products for delete
+  using (auth.uid() = farmer_id or public.is_admin());
+

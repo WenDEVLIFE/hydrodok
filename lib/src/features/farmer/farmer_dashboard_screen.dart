@@ -3,8 +3,10 @@ import 'package:latlong2/latlong.dart' hide Path;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/service/product_service.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
+import 'add_product_dialog.dart';
 import '../onboarding/farm_map_picker_dialog.dart';
 import '../user/forum/forum_screen.dart';
 import '../user/map/map_screen.dart';
@@ -29,10 +31,15 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
   // ── Realtime stream ─────────────────────────────────────────────────────
   late final Stream<List<Map<String, dynamic>>> _farmStream;
 
+  // ── Products & Orders ───────────────────────────────────────────────────
+  List<Map<String, dynamic>> _myProducts = [];
+  List<Map<String, dynamic>> _myOrders = [];
+
   @override
   void initState() {
     super.initState();
     _initStream();
+    _loadProductsAndOrders();
   }
 
   void _initStream() {
@@ -44,6 +51,22 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
         .from('farms')
         .stream(primaryKey: ['id'])
         .eq('owner_id', user.id);
+  }
+
+  Future<void> _loadProductsAndOrders() async {
+    try {
+      final service = ProductService(supabase: Supabase.instance.client);
+
+      final products = await service.getMyProducts();
+      final orders = await service.getMyOrders();
+
+      if (mounted) {
+        setState(() {
+          _myProducts = products;
+          _myOrders = orders;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -144,7 +167,10 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
 
             return SafeArea(
               child: RefreshIndicator(
-                onRefresh: () async => setState(() {}),
+                onRefresh: () async {
+                  await _loadProductsAndOrders();
+                  setState(() {});
+                },
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -315,6 +341,49 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                         isDone: false,
                       ),
                       const SizedBox(height: 32),
+
+                      // ── My Products ──────────────────────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'My Products',
+                            style: AppTypography.heading3(
+                              color: ColorUtils.darkText,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _showAddProductDialog(),
+                            icon: const Icon(LucideIcons.plus, size: 16),
+                            label: const Text('Add'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: ColorUtils.forestGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (_myProducts.isEmpty)
+                        _buildEmptyState('No products yet. Tap "Add" to create one.')
+                      else
+                        ..._myProducts.map((p) => _buildProductCard(p)),
+                      const SizedBox(height: 24),
+
+                      // ── Incoming Orders ─────────────────────────────────────
+                      Text(
+                        'Incoming Orders',
+                        style: AppTypography.heading3(
+                          color: ColorUtils.darkText,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (_myOrders.isEmpty)
+                        _buildEmptyState('No orders yet.')
+                      else
+                        ..._myOrders.map((o) => _buildOrderCard(o)),
+                      const SizedBox(height: 32),
                     ],
                   ),
                 ),
@@ -371,6 +440,213 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
         );
       }
     }
+  }
+
+  // ── Add Product Dialog ────────────────────────────────────────────────
+
+  void _showAddProductDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddProductDialog(
+        onProductAdded: _loadProductsAndOrders,
+      ),
+    );
+  }
+
+  // ── Empty State ───────────────────────────────────────────────────────
+
+  Widget _buildEmptyState(String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Text(
+        message,
+        style: AppTypography.bodyMedium(color: Colors.grey.shade500),
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  // ── Product Card ──────────────────────────────────────────────────────
+
+  Widget _buildProductCard(Map<String, dynamic> product) {
+    final name = product['name'] as String? ?? '';
+    final price = (product['price_per_kg'] as num?)?.toDouble() ?? 0;
+    final unit = product['unit'] as String? ?? 'kg';
+    final stock = product['stock_quantity'] as int? ?? 0;
+    final status = product['status'] as String? ?? 'pending';
+
+    final (String statusLabel, Color statusColor) = switch (status) {
+      'approved' => ('Approved', ColorUtils.sageGreen),
+      'rejected' => ('Rejected', Colors.red),
+      _ => ('Pending', ColorUtils.terracotta),
+    };
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: ColorUtils.forestGreen.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(LucideIcons.leaf, color: ColorUtils.forestGreen, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: AppTypography.bodyMedium(
+                    color: ColorUtils.darkText,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'PHP ${price.toStringAsFixed(0)} / $unit  •  $stock in stock',
+                  style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              statusLabel,
+              style: AppTypography.bodySmall(
+                color: statusColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Order Card ────────────────────────────────────────────────────────
+
+  Widget _buildOrderCard(Map<String, dynamic> order) {
+    final status = order['status'] as String? ?? 'pending';
+    final quantity = order['quantity'] as int? ?? 0;
+    final totalPrice = (order['total_price'] as num?)?.toDouble() ?? 0;
+    final createdAt = order['created_at'] as String? ?? '';
+    final product = order['products'] as Map<String, dynamic>?;
+    final productName = product?['name'] as String? ?? 'Unknown Product';
+
+    final (String statusLabel, Color statusColor) = switch (status) {
+      'confirmed' => ('Confirmed', ColorUtils.sageGreen),
+      'delivered' => ('Delivered', const Color(0xFF64B5F6)),
+      'cancelled' => ('Cancelled', Colors.red),
+      _ => ('Pending', ColorUtils.terracotta),
+    };
+
+    // Format date
+    String dateStr = '';
+    if (createdAt.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(createdAt);
+        dateStr = '${dt.month}/${dt.day}/${dt.year}';
+      } catch (_) {
+        dateStr = createdAt.substring(0, 10);
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: ColorUtils.terracotta.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(LucideIcons.shoppingBag, color: ColorUtils.terracotta, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  productName,
+                  style: AppTypography.bodyMedium(
+                    color: ColorUtils.darkText,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Qty: $quantity  •  PHP ${totalPrice.toStringAsFixed(0)}  •  $dateStr',
+                  style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              statusLabel,
+              style: AppTypography.bodySmall(
+                color: statusColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Farm Status Card ────────────────────────────────────────────────────

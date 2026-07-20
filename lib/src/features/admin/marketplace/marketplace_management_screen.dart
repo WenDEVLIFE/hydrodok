@@ -1,97 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 
-// ── Data Model ─────────────────────────────────────────────────────────────
-
-enum ProductStatus { active, pending, suspended }
-
-class MarketplaceProduct {
-  final String id;
-  final String productName;
-  final String category; // e.g. Vegetables, Herbs, Fruit Vegetables
-  final String farmerName;
-  final String farmName;
-  final int stockUnits;
-  final double pricePerKg;
-  final String dateListed;
-  final ProductStatus status;
-
-  const MarketplaceProduct({
-    required this.id,
-    required this.productName,
-    required this.category,
-    required this.farmerName,
-    required this.farmName,
-    required this.stockUnits,
-    required this.pricePerKg,
-    required this.dateListed,
-    required this.status,
-  });
-}
-
-const _products = <MarketplaceProduct>[
-  MarketplaceProduct(
-    id: '1',
-    productName: 'Fresh Butterhead Lettuce',
-    category: 'Vegetables',
-    farmerName: 'Rosa Santos',
-    farmName: 'Bukid Kabataan Shelter',
-    stockUnits: 10000,
-    pricePerKg: 100.0,
-    dateListed: 'Jul 16, 2026',
-    status: ProductStatus.active,
-  ),
-  MarketplaceProduct(
-    id: '2',
-    productName: 'Hydroponic Sweet Basil',
-    category: 'Herbs',
-    farmerName: 'Mario Reyes',
-    farmName: 'Mahogany Farm',
-    stockUnits: 5000,
-    pricePerKg: 150.0,
-    dateListed: 'Jul 15, 2026',
-    status: ProductStatus.active,
-  ),
-  MarketplaceProduct(
-    id: '3',
-    productName: 'Cherry Tomatoes Batch #4',
-    category: 'Fruit Vegetables',
-    farmerName: 'Liza Cruz',
-    farmName: 'Green Valley Hydroponics',
-    stockUnits: 3200,
-    pricePerKg: 180.0,
-    dateListed: 'Jul 17, 2026',
-    status: ProductStatus.pending,
-  ),
-  MarketplaceProduct(
-    id: '4',
-    productName: 'Organic Kangkong Harvest',
-    category: 'Vegetables',
-    farmerName: 'Ben Torres',
-    farmName: 'Sto. Nino Urban Farm',
-    stockUnits: 8000,
-    pricePerKg: 80.0,
-    dateListed: 'Jul 13, 2026',
-    status: ProductStatus.active,
-  ),
-  MarketplaceProduct(
-    id: '5',
-    productName: 'Red Bell Pepper (Unverified listing)',
-    category: 'Fruit Vegetables',
-    farmerName: 'Unknown Vendor',
-    farmName: 'Unverified Farm',
-    stockUnits: 500,
-    pricePerKg: 250.0,
-    dateListed: 'Jul 12, 2026',
-    status: ProductStatus.suspended,
-  ),
-];
-
-// ── Screen Widget ──────────────────────────────────────────────────────────
-
+/// Admin Product Approval Screen:
+/// Review pending product submissions from farmers, approve or reject them.
+/// Approved products become visible on the farmer's public listing.
 class MarketplaceManagementScreen extends StatefulWidget {
   const MarketplaceManagementScreen({super.key});
 
@@ -102,505 +18,475 @@ class MarketplaceManagementScreen extends StatefulWidget {
 
 class _MarketplaceManagementScreenState
     extends State<MarketplaceManagementScreen> {
-  String _activeFilter = 'All'; // All | Active | Pending | Suspended
-  final _searchController = TextEditingController();
-
-  List<MarketplaceProduct> get _filteredProducts {
-    if (_activeFilter == 'Active') {
-      return _products.where((p) => p.status == ProductStatus.active).toList();
-    } else if (_activeFilter == 'Pending') {
-      return _products
-          .where((p) => p.status == ProductStatus.pending)
-          .toList();
-    } else if (_activeFilter == 'Suspended') {
-      return _products
-          .where((p) => p.status == ProductStatus.suspended)
-          .toList();
-    }
-    return _products;
-  }
+  String _activeFilter = 'Pending'; // All | Pending | Approved | Rejected
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _products = [];
 
   @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _fetchProducts();
+  }
+
+  Future<void> _fetchProducts() async {
+    setState(() => _isLoading = true);
+    try {
+      final supabase = Supabase.instance.client;
+      var query = supabase
+          .from('products')
+          .select('*, profiles!farmer_id(full_name)');
+
+      if (_activeFilter == 'Pending') {
+        query = query.eq('status', 'pending');
+      } else if (_activeFilter == 'Approved') {
+        query = query.eq('status', 'approved');
+      } else if (_activeFilter == 'Rejected') {
+        query = query.eq('status', 'rejected');
+      }
+
+      final response = await query.order('created_at', ascending: false);
+      if (mounted) {
+        setState(() {
+          _products = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (_) {
+      _products = [];
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _approveProduct(String productId) async {
+    try {
+      // Get product with farmer info for notification
+      final productData = await Supabase.instance.client
+          .from('products')
+          .select('name, farmer_id')
+          .eq('id', productId)
+          .maybeSingle();
+
+      await Supabase.instance.client.from('products').update({
+        'status': 'approved',
+        'rejection_reason': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', productId);
+
+      // Notify the farmer
+      final farmerId = productData?['farmer_id'] as String?;
+      final productName = productData?['name'] as String? ?? 'Product';
+      if (farmerId != null) {
+        try {
+          await Supabase.instance.client.from('notifications').insert({
+            'user_id': farmerId,
+            'title': 'Product Approved! 🎉',
+            'message': 'Your product "$productName" has been approved and is now live!',
+            'read': false,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Product Approved!'),
+            backgroundColor: ColorUtils.forestGreen,
+          ),
+        );
+      }
+      _fetchProducts();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error approving product: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectProduct(String productId) async {
+    final reasonController = TextEditingController();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject Product'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Specify the reason for rejection (this will be sent to the farmer):',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'e.g., Product does not meet quality standards',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Confirm Rejection', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final reason = reasonController.text.trim();
+
+      // Get product with farm owner info for notification
+      final productData = await Supabase.instance.client
+          .from('products')
+          .select('name, farms(owner_id)')
+          .eq('id', productId)
+          .maybeSingle();
+
+      await Supabase.instance.client.from('products').update({
+        'status': 'rejected',
+        'rejection_reason': reason.isEmpty ? 'Did not meet requirements.' : reason,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('id', productId);
+
+      // Notify the farmer
+      final ownerId = productData?['farms']?['owner_id'] as String?;
+      final productName = productData?['name'] as String? ?? 'Product';
+      if (ownerId != null) {
+        try {
+          await Supabase.instance.client.from('notifications').insert({
+            'user_id': ownerId,
+            'title': 'Product Rejected',
+            'message': 'Your product "$productName" was rejected. Reason: ${reason.isEmpty ? "Did not meet requirements" : reason}.',
+            'read': false,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Product Rejected and Farmer Notified.')),
+        );
+      }
+      _fetchProducts();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error rejecting product: $e')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Title & Subtitle Row ────────────────────────────────────
+          // ── Header ──────────────────────────────────────────────────────
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Marketplace Management',
-                      style: AppTypography.heading2(
-                        color: ColorUtils.darkText,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Review, approve, and moderate hydroponic product listings',
-                      style: AppTypography.bodyMedium(
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Product Approval',
+                    style: AppTypography.heading2(color: ColorUtils.darkText),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Review and approve farmer product listings before they go live.',
+                    style: AppTypography.bodyMedium(color: Colors.grey.shade600),
+                  ),
+                ],
               ),
-              ElevatedButton.icon(
-                onPressed: () {
-                  // TODO: Admin create featured listing
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: ColorUtils.forestGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  elevation: 0,
-                ),
-                icon: const Icon(LucideIcons.plus, size: 18),
-                label: Text(
-                  'Add Featured Listing',
-                  style: AppTypography.button(
-                    color: Colors.white,
-                    fontSize: 13,
-                  ),
-                ),
+              IconButton(
+                icon: const Icon(LucideIcons.refreshCw, color: ColorUtils.forestGreen),
+                onPressed: _fetchProducts,
               ),
             ],
           ),
-          const SizedBox(height: 24),
-
-          // ── Stats Summary Row ─────────────────────────────────────────
-          _buildStatsRow(),
-          const SizedBox(height: 24),
-
-          // ── Search & Filter Bar ──────────────────────────────────────
-          _buildSearchAndFilters(),
           const SizedBox(height: 20),
 
-          // ── Products Table ───────────────────────────────────────────
-          Expanded(child: _buildTable()),
+          // ── Filter Tabs ─────────────────────────────────────────────────
+          Row(
+            children: [
+              _buildFilterChip('Pending', LucideIcons.clock),
+              const SizedBox(width: 8),
+              _buildFilterChip('Approved', LucideIcons.checkCheck),
+              const SizedBox(width: 8),
+              _buildFilterChip('Rejected', LucideIcons.xCircle),
+              const SizedBox(width: 8),
+              _buildFilterChip('All', LucideIcons.layers),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // ── Products List ───────────────────────────────────────────────
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _products.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(LucideIcons.package, size: 48, color: Colors.grey),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No $_activeFilter products',
+                              style: AppTypography.bodyLarge(color: Colors.grey.shade600),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _products.length,
+                        itemBuilder: (ctx, index) => _buildProductCard(_products[index]),
+                      ),
+          ),
         ],
       ),
     );
   }
 
-  // ── Stats Row Widget ─────────────────────────────────────────────────────
-
-  Widget _buildStatsRow() {
-    return Row(
-      children: [
-        _buildStatCard(
-          value: '42',
-          label: 'Active Listings',
-          valueColor: ColorUtils.forestGreen,
-          bgColor: ColorUtils.sageGreen.withValues(alpha: 0.2),
-        ),
-        const SizedBox(width: 16),
-        _buildStatCard(
-          value: '5',
-          label: 'Pending Approvals',
-          valueColor: ColorUtils.terracotta,
-          bgColor: const Color(0xFFFFF3E0),
-        ),
-        const SizedBox(width: 16),
-        _buildStatCard(
-          value: '₱ 458,000',
-          label: 'Total Market Value',
-          valueColor: ColorUtils.darkText,
-          bgColor: Colors.grey.shade100,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard({
-    required String value,
-    required String label,
-    required Color valueColor,
-    required Color bgColor,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: AppTypography.heading3(
-                color: valueColor,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: AppTypography.bodySmall(
-                color: Colors.grey.shade600,
-              ),
-            ),
-          ],
-        ),
+  Widget _buildFilterChip(String label, IconData icon) {
+    final isSelected = _activeFilter == label;
+    return FilterChip(
+      selected: isSelected,
+      showCheckmark: false,
+      avatar: Icon(
+        icon,
+        size: 16,
+        color: isSelected ? ColorUtils.pureWhite : ColorUtils.darkText,
       ),
-    );
-  }
-
-  // ── Search & Filters ─────────────────────────────────────────────────────
-
-  Widget _buildSearchAndFilters() {
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: TextField(
-              controller: _searchController,
-              style: AppTypography.bodyMedium(color: ColorUtils.darkText),
-              decoration: InputDecoration(
-                hintText: 'Search product or farm name...',
-                hintStyle: AppTypography.bodyMedium(
-                  color: Colors.grey.shade400,
-                ),
-                prefixIcon: Icon(
-                  LucideIcons.search,
-                  size: 18,
-                  color: Colors.grey.shade400,
-                ),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        _buildFilterPill('All'),
-        const SizedBox(width: 8),
-        _buildFilterPill('Active'),
-        const SizedBox(width: 8),
-        _buildFilterPill('Pending'),
-        const SizedBox(width: 8),
-        _buildFilterPill('Suspended'),
-      ],
-    );
-  }
-
-  Widget _buildFilterPill(String label) {
-    final isActive = _activeFilter == label;
-    return GestureDetector(
-      onTap: () => setState(() => _activeFilter = label),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-        decoration: BoxDecoration(
-          color: isActive ? ColorUtils.forestGreen : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: AppTypography.bodySmall(
-            color: isActive ? Colors.white : ColorUtils.darkText,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+      label: Text(label),
+      labelStyle: TextStyle(
+        color: isSelected ? ColorUtils.pureWhite : ColorUtils.darkText,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
       ),
+      selectedColor: ColorUtils.forestGreen,
+      backgroundColor: Colors.grey.shade200,
+      onSelected: (_) {
+        setState(() => _activeFilter = label);
+        _fetchProducts();
+      },
     );
   }
 
-  // ── Table Widget ─────────────────────────────────────────────────────────
+  Widget _buildProductCard(Map<String, dynamic> product) {
+    final productId = product['id'] as String? ?? '';
+    final name = product['name'] as String? ?? 'Unnamed Product';
+    final description = product['description'] as String? ?? '';
+    final price = (product['price_per_kg'] as num?)?.toDouble() ?? 0;
+    final unit = product['unit'] as String? ?? 'kg';
+    final stock = product['stock_quantity'] as int? ?? 0;
+    final status = product['status'] as String? ?? 'pending';
+    final rejectionReason = product['rejection_reason'] as String?;
 
-  Widget _buildTable() {
-    final products = _filteredProducts;
+    // Get farmer info from joined profiles
+    final profiles = product['profiles'] as Map<String, dynamic>?;
+    final farmerName = profiles?['full_name'] as String? ?? 'Unknown Farmer';
 
-    return Column(
-      children: [
-        // Table Header
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Colors.grey.shade300),
-            ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          child: Row(
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row: product name + status badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _headerCell('PRODUCT', flex: 3),
-              _headerCell('FARM / VENDOR', flex: 3),
-              _headerCell('STOCK & PRICE', flex: 2),
-              _headerCell('STATUS', flex: 2),
-              _headerCell('ACTIONS', flex: 2, alignRight: true),
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: ColorUtils.forestGreen.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(LucideIcons.leaf, color: ColorUtils.forestGreen, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: AppTypography.heading3(color: ColorUtils.darkText, fontSize: 18),
+                      ),
+                      if (description.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+              _buildStatusBadge(status),
             ],
           ),
-        ),
+          const SizedBox(height: 16),
 
-        // Table Rows
-        Expanded(
-          child: ListView.separated(
-            itemCount: products.length,
-            separatorBuilder: (_, __) =>
-                Divider(height: 1, color: Colors.grey.shade200),
-            itemBuilder: (context, index) {
-              return _buildRow(products[index]);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _headerCell(String text, {required int flex, bool alignRight = false}) {
-    return Expanded(
-      flex: flex,
-      child: Text(
-        text,
-        textAlign: alignRight ? TextAlign.right : TextAlign.left,
-        style: AppTypography.overline(
-          color: Colors.grey.shade500,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRow(MarketplaceProduct product) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: [
-          // Product Name & Category
-          Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  product.productName,
-                  style: AppTypography.bodySmall(
-                    color: ColorUtils.darkText,
-                    fontWeight: FontWeight.w600,
-                  ),
+          // Details row: farm, farmer, price, stock
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Chip(
+                avatar: const Icon(LucideIcons.user, size: 16, color: Colors.grey),
+                backgroundColor: Colors.grey.shade100,
+                label: Text(
+                  'By $farmerName',
+                  style: AppTypography.bodySmall(color: Colors.grey.shade700),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  product.category,
-                  style: AppTypography.caption(
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Farm & Vendor
-          Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  product.farmName,
-                  style: AppTypography.bodySmall(
-                    color: ColorUtils.darkText,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'By ${product.farmerName}',
-                  style: AppTypography.caption(
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Stock & Price
-          Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '₱ ${product.pricePerKg.toStringAsFixed(0)} / kg',
+              ),
+              Chip(
+                avatar: const Icon(LucideIcons.banknote, size: 16, color: ColorUtils.forestGreen),
+                backgroundColor: Colors.grey.shade100,
+                label: Text(
+                  '₱${price.toStringAsFixed(0)} / $unit',
                   style: AppTypography.bodySmall(
                     color: ColorUtils.forestGreen,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_formatNumber(product.stockUnits)} units available',
-                  style: AppTypography.caption(
-                    color: Colors.grey.shade600,
+              ),
+              Chip(
+                avatar: const Icon(LucideIcons.package, size: 16, color: Colors.grey),
+                backgroundColor: Colors.grey.shade100,
+                label: Text(
+                  '$stock in stock',
+                  style: AppTypography.bodySmall(color: Colors.grey.shade700),
+                ),
+              ),
+            ],
+          ),
+
+          // Rejection reason (if rejected)
+          if (status == 'rejected' && rejectionReason != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.alertTriangle, size: 16, color: Colors.redAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Rejection Reason: $rejectionReason',
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                    ),
                   ),
+                ],
+              ),
+            ),
+          ],
+
+          // Action buttons (only for pending)
+          if (status == 'pending') ...[
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                    side: const BorderSide(color: Colors.redAccent),
+                  ),
+                  icon: const Icon(LucideIcons.x, size: 18),
+                  label: const Text('Reject'),
+                  onPressed: () => _rejectProduct(productId),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: ColorUtils.forestGreen,
+                    foregroundColor: ColorUtils.pureWhite,
+                  ),
+                  icon: const Icon(LucideIcons.check, size: 18),
+                  label: const Text('Approve'),
+                  onPressed: () => _approveProduct(productId),
                 ),
               ],
             ),
-          ),
-
-          // Status Badge
-          Expanded(
-            flex: 2,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: _buildStatusBadge(product.status),
-            ),
-          ),
-
-          // Actions
-          Expanded(
-            flex: 2,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: _buildActionButtons(product),
-            ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildStatusBadge(ProductStatus status) {
-    final (String label, Color bg) = switch (status) {
-      ProductStatus.active => ('Active', ColorUtils.forestGreen),
-      ProductStatus.pending => ('Pending Approval', ColorUtils.terracotta),
-      ProductStatus.suspended => ('Suspended', const Color(0xFFD84040)),
-    };
+  Widget _buildStatusBadge(String status) {
+    Color bg;
+    Color text;
+    String label;
+
+    switch (status) {
+      case 'approved':
+        bg = Colors.green.shade100;
+        text = Colors.green.shade900;
+        label = 'Approved';
+      case 'rejected':
+        bg = Colors.red.shade100;
+        text = Colors.red.shade900;
+        label = 'Rejected';
+      default:
+        bg = Colors.orange.shade100;
+        text = Colors.orange.shade900;
+        label = 'Pending Approval';
+    }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         label,
-        style: AppTypography.caption(
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
-          fontSize: 11,
-        ),
+        style: TextStyle(color: text, fontSize: 12, fontWeight: FontWeight.bold),
       ),
     );
-  }
-
-  Widget _buildActionButtons(MarketplaceProduct product) {
-    switch (product.status) {
-      case ProductStatus.pending:
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ElevatedButton(
-              onPressed: () {
-                // TODO: Approve product
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: ColorUtils.forestGreen,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                'Approve',
-                style: AppTypography.caption(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        );
-      case ProductStatus.active:
-        return OutlinedButton(
-          onPressed: () {
-            // TODO: Suspend listing
-          },
-          style: OutlinedButton.styleFrom(
-            side: BorderSide(color: Colors.grey.shade400),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 8,
-            ),
-          ),
-          child: Text(
-            'Suspend',
-            style: AppTypography.caption(
-              color: ColorUtils.darkText,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        );
-      case ProductStatus.suspended:
-        return ElevatedButton(
-          onPressed: () {
-            // TODO: Re-activate or review
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2979FF),
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 8,
-            ),
-            elevation: 0,
-          ),
-          child: Text(
-            'Review',
-            style: AppTypography.caption(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        );
-    }
-  }
-
-  String _formatNumber(int n) {
-    if (n >= 1000) {
-      final thousands = n ~/ 1000;
-      final remainder = n % 1000;
-      if (remainder == 0) return '$thousands,000';
-      return '$thousands,${remainder.toString().padLeft(3, '0')}';
-    }
-    return n.toString();
   }
 }
