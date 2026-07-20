@@ -123,8 +123,8 @@ class ProductService {
     yield* _supabase
         .from('products')
         .stream(primaryKey: ['id'])
-        .eq('farmer_id', user.id)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        .map((rows) => rows.where((r) => r['farmer_id'] == user.id).toList());
   }
 
   // ── Orders ──────────────────────────────────────────────────────────────
@@ -154,8 +154,8 @@ class ProductService {
     yield* _supabase
         .from('orders')
         .stream(primaryKey: ['id'])
-        .eq('farmer_id', user.id)
-        .order('created_at', ascending: false);
+        .order('created_at', ascending: false)
+        .map((rows) => rows.where((r) => r['farmer_id'] == user.id).toList());
   }
 
   /// Updates order status (confirmed, delivered, cancelled).
