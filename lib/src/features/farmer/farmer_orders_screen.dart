@@ -186,7 +186,8 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
                     final orderId = order['id'] as String;
                     final status = order['status'] as String? ?? 'pending';
                     final qty = (order['quantity'] as num?)?.toInt() ?? 1;
-                    final totalPrice = (order['total_price'] as num?)?.toDouble() ?? 0;
+                    final totalPrice = (order['total'] as num?)?.toDouble() ??
+                        (order['total_price'] as num?)?.toDouble() ?? 0;
                     final buyerName = order['buyer_name'] as String? ?? order['customer_name'] as String? ?? 'Customer';
                     final address = order['delivery_address'] as String? ?? 'Standard Delivery';
 

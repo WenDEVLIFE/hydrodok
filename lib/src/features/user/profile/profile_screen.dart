@@ -16,6 +16,7 @@ import '../../farmer/farm_listing_screen.dart';
 import '../../farmer/farm_settings_screen.dart';
 import '../../farmer/farmer_orders_screen.dart';
 import '../../farmer/farmer_requests_screen.dart';
+import 'consumer_orders_screen.dart';
 import '../../farmer/issue_reports_screen.dart';
 import '../../login/login_screen.dart';
 
@@ -45,6 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   double _avgRating = 0;
   int _reviewCount = 0;
   int _productCount = 0;
+  int _orderCount = 0;
 
   @override
   void initState() {
@@ -112,6 +114,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   debugPrint('Profile: reviews load failed: $e');
                 }
               }
+            }
+          }
+        } else {
+          final userId = Supabase.instance.client.auth.currentUser?.id;
+          if (userId != null) {
+            // Load real order count for consumers
+            try {
+              final ordersRes = await Supabase.instance.client
+                  .from('orders')
+                  .select('id')
+                  .eq('buyer_id', userId);
+              final count = (ordersRes as List).length;
+              if (mounted) setState(() => _orderCount = count);
+            } catch (e) {
+              debugPrint('Profile: order count failed: $e');
             }
           }
         }
@@ -306,7 +323,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             );
                           } else {
                             Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const FarmerOrdersScreen()),
+                              MaterialPageRoute(builder: (_) => const ConsumerOrdersScreen()),
                             );
                           }
                         },
@@ -589,7 +606,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Expanded(
           child: _buildStatItem(
             _isFarmer ? 'Products' : 'Orders',
-            _isFarmer ? '$_productCount' : '—',
+            _isFarmer ? '$_productCount' : '$_orderCount',
           ),
         ),
         const SizedBox(width: 12),

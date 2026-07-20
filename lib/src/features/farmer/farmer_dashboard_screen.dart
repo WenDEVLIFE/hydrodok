@@ -1095,11 +1095,19 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
 
   Widget _buildOrderCard(Map<String, dynamic> order) {
     final status = order['status'] as String? ?? 'pending';
-    final quantity = order['quantity'] as int? ?? 0;
-    final totalPrice = (order['total_price'] as num?)?.toDouble() ?? 0;
+    final totalPrice = (order['total'] as num?)?.toDouble() ??
+        (order['total_price'] as num?)?.toDouble() ?? 0;
     final createdAt = order['created_at'] as String? ?? '';
     final product = order['products'] as Map<String, dynamic>?;
     final productName = product?['name'] as String? ?? 'Unknown Product';
+
+    // Legacy single-product orders have quantity on the order row;
+    // normalized orders store items in order_items.
+    int quantity = order['quantity'] as int? ?? 0;
+    if (quantity == 0) {
+      final items = List<Map<String, dynamic>>.from(order['order_items'] as List<dynamic>? ?? []);
+      quantity = items.fold<int>(0, (sum, item) => sum + ((item['quantity'] as int?) ?? 0));
+    }
 
     final (String statusLabel, Color statusColor) = switch (status) {
       'confirmed' => ('Confirmed', ColorUtils.sageGreen),

@@ -282,15 +282,27 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
     final quantity = int.tryParse(quantityController.text) ?? 1;
     final total = price * quantity;
 
+    if (quantity <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid quantity.')),
+        );
+      }
+      return;
+    }
+
     try {
-      await Supabase.instance.client.from('orders').insert({
-        'buyer_id': user.id,
-        'farmer_id': farmerId,
-        'product_id': productId,
-        'farm_id': farmId,
-        'quantity': quantity,
-        'total_price': total,
-        'status': 'pending',
+      await Supabase.instance.client.rpc('create_order_with_items', params: {
+        'p_buyer_id': user.id,
+        'p_farmer_id': farmerId,
+        'p_status': 'pending',
+        'p_items': [
+          {
+            'product_id': productId,
+            'quantity': quantity,
+            'subtotal': total,
+          }
+        ],
       });
 
       if (mounted) {
