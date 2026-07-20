@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -116,7 +115,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
               const SizedBox(height: 4),
               Text(
                 'Product will be reviewed by admin before publishing.',
-                style: AppTypography.bodySmall(color: Colors.grey.shade500),
+                style: AppTypography.bodySmall(color: Colors.grey.shade600),
               ),
               const SizedBox(height: 20),
 
@@ -177,17 +176,27 @@ class _AddProductDialogState extends State<AddProductDialog> {
                           decoration: BoxDecoration(
                             border: Border.all(color: Colors.grey.shade300),
                             borderRadius: BorderRadius.circular(10),
+
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
+                              focusColor: ColorUtils.accent,
                               value: _selectedUnit,
                               isExpanded: true,
+                              style: AppTypography.bodyMedium(color: ColorUtils.darkText), // Add this line
                               items: _units
-                                  .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                                  .map((u) => DropdownMenuItem(
+                                  value: u,
+                                  child: Text(
+                                    u,
+                                    style: AppTypography.bodyMedium(color: ColorUtils.darkText), // Optionally here too
+                                  )
+                              ))
                                   .toList(),
                               onChanged: (v) {
                                 if (v != null) setState(() => _selectedUnit = v);
                               },
+                              dropdownColor: Colors.white, // Optional: change dropdown background
                             ),
                           ),
                         ),

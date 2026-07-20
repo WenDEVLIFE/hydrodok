@@ -109,17 +109,17 @@ class _AdminShellState extends State<AdminShell> {
             padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
             child: Row(
               children: [
-                const Icon(
-                  LucideIcons.diamond,
-                  color: Colors.white,
-                  size: 22,
+                 Image.asset(
+                  'assets/logo.png',
+                  width: 36,
+                  height: 36,
                 ),
                 const SizedBox(width: 10),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'AgriConnect',
+                      'Hydrodok',
                       style: AppTypography.subtitle1(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,

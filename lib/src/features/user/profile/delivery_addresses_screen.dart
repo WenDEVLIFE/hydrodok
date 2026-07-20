@@ -4,7 +4,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/service/delivery_address_service.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
+import '../../../widget/body_text.dart';
+import '../../../widget/body_text_large.dart';
+import '../../../widget/body_text_small.dart';
 import '../../onboarding/farm_map_picker_dialog.dart';
+
 
 /// Screen allowing users to view, add, set default, and delete saved delivery addresses.
 class DeliveryAddressesScreen extends StatefulWidget {
@@ -40,7 +44,7 @@ class _DeliveryAddressesScreenState extends State<DeliveryAddressesScreen> {
   Future<void> _openAddAddressDialog() async {
     final addressController = TextEditingController();
     String selectedLabel = 'Home';
-    bool isDefault = _addresses.isEmpty; // Auto default if first address
+    bool isDefault = _addresses.isEmpty;
     double? selectedLat;
     double? selectedLng;
 
@@ -48,12 +52,17 @@ class _DeliveryAddressesScreenState extends State<DeliveryAddressesScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) => AlertDialog(
+          backgroundColor: ColorUtils.primary,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
-            children: const [
-              Icon(LucideIcons.mapPin, color: ColorUtils.forestGreen),
-              SizedBox(width: 8),
-              Text('Add Delivery Address'),
+            children: [
+              const Icon(LucideIcons.mapPin, color: ColorUtils.forestGreen),
+              const SizedBox(width: 8),
+              BodyTextLarge(
+                'Add Delivery Address',
+                color: ColorUtils.pureWhite,
+                fontWeight: FontWeight.bold,
+              ),
             ],
           ),
           content: SingleChildScrollView(
@@ -61,9 +70,11 @@ class _DeliveryAddressesScreenState extends State<DeliveryAddressesScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                BodyTextSmall(
                   'Label',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  color: ColorUtils.pureWhite,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
                 ),
                 const SizedBox(height: 6),
                 Wrap(
@@ -72,13 +83,9 @@ class _DeliveryAddressesScreenState extends State<DeliveryAddressesScreen> {
                   children: ['Home', 'Work', 'Farm', 'Other'].map((label) {
                     final isSelected = selectedLabel == label;
                     return ChoiceChip(
-                      label: Text(label),
+                      label: BodyText(label, color: isSelected ? ColorUtils.textDark : ColorUtils.pureWhite),
                       selected: isSelected,
-                      selectedColor: ColorUtils.forestGreen,
-                      labelStyle: TextStyle(
-                        color: isSelected ? Colors.white : ColorUtils.darkText,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      selectedColor: ColorUtils.pureWhite,
                       onSelected: (val) {
                         if (val) setModalState(() => selectedLabel = label);
                       },
@@ -89,10 +96,20 @@ class _DeliveryAddressesScreenState extends State<DeliveryAddressesScreen> {
                 TextField(
                   controller: addressController,
                   maxLines: 2,
+                  style: AppTypography.bodyMedium(color: ColorUtils.darkText),
                   decoration: InputDecoration(
                     labelText: 'Full Address',
+                    labelStyle: AppTypography.bodySmall(
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
                     hintText: 'House/Building No., Street, Barangay, City, Province',
+                    hintStyle: AppTypography.bodyMedium(color: Colors.grey.shade400),
                     border: const OutlineInputBorder(),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: const BorderSide(color: ColorUtils.forestGreen),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     suffixIcon: IconButton(
                       icon: const Icon(LucideIcons.map, color: ColorUtils.forestGreen),
                       tooltip: 'Pick on Map',
@@ -114,7 +131,11 @@ class _DeliveryAddressesScreenState extends State<DeliveryAddressesScreen> {
                 const SizedBox(height: 10),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Set as Default Delivery Address', style: TextStyle(fontSize: 13)),
+                  title: BodyTextSmall(
+                    'Set as Default Delivery Address',
+                    color: ColorUtils.pureWhite,
+                    fontSize: 13,
+                  ),
                   value: isDefault,
                   activeColor: ColorUtils.forestGreen,
                   onChanged: (val) {
@@ -127,7 +148,7 @@ class _DeliveryAddressesScreenState extends State<DeliveryAddressesScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
+              child: BodyText('Cancel', color: Colors.white),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: ColorUtils.forestGreen),
@@ -157,7 +178,7 @@ class _DeliveryAddressesScreenState extends State<DeliveryAddressesScreen> {
                   }
                 }
               },
-              child: const Text('Save Address', style: TextStyle(color: Colors.white)),
+              child: BodyText('Save Address', color: Colors.white),
             ),
           ],
         ),
@@ -180,12 +201,10 @@ class _DeliveryAddressesScreenState extends State<DeliveryAddressesScreen> {
       ),
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
+          title: BodyTextLarge(
             'Saved Delivery Addresses',
-            style: AppTypography.heading3(
-              color: ColorUtils.darkText,
-              fontWeight: FontWeight.w700,
-            ),
+            color: ColorUtils.darkText,
+            fontWeight: FontWeight.w700,
           ),
           backgroundColor: Colors.white,
           elevation: 0,
@@ -194,144 +213,140 @@ class _DeliveryAddressesScreenState extends State<DeliveryAddressesScreen> {
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : RefreshIndicator(
-                onRefresh: _loadAddresses,
-                child: _addresses.isEmpty
-                    ? ListView(
-                        children: [
-                          SizedBox(height: MediaQuery.of(context).size.height * 0.25),
-                          Center(
-                            child: Column(
-                              children: [
-                                Icon(LucideIcons.mapPin, size: 48, color: Colors.grey.shade400),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No saved delivery addresses',
-                                  style: AppTypography.bodyLarge(
-                                    color: Colors.grey.shade600,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Tap "+ Add Address" below to save your delivery locations.',
-                                  style: AppTypography.bodySmall(color: Colors.grey.shade500),
-                                ),
-                              ],
+          onRefresh: _loadAddresses,
+          child: _addresses.isEmpty
+              ? ListView(
+            children: [
+              SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+              Center(
+                child: Column(
+                  children: [
+                    Icon(LucideIcons.mapPin, size: 48, color: Colors.grey.shade400),
+                    const SizedBox(height: 16),
+                    BodyTextLarge(
+                      'No saved delivery addresses',
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    const SizedBox(height: 8),
+                    BodyTextSmall(
+                      'Tap "+ Add Address" below to save your delivery locations.',
+                      color: Colors.grey.shade500,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          )
+              : ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            itemCount: _addresses.length,
+            itemBuilder: (context, index) {
+              final item = _addresses[index];
+              final id = item['id'] as String;
+              final label = item['label'] as String? ?? 'Home';
+              final address = item['address'] as String? ?? '';
+              final isDefault = item['is_default'] == true;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDefault ? ColorUtils.forestGreen : Colors.grey.shade200,
+                    width: isDefault ? 1.5 : 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: ColorUtils.forestGreen.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: BodyTextSmall(
+                            label.toUpperCase(),
+                            color: ColorUtils.forestGreen,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                        if (isDefault) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade100,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: BodyTextSmall(
+                              'DEFAULT',
+                              color: Colors.amber.shade900,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
                             ),
                           ),
                         ],
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                        itemCount: _addresses.length,
-                        itemBuilder: (context, index) {
-                          final item = _addresses[index];
-                          final id = item['id'] as String;
-                          final label = item['label'] as String? ?? 'Home';
-                          final address = item['address'] as String? ?? '';
-                          final isDefault = item['is_default'] == true;
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isDefault ? ColorUtils.forestGreen : Colors.grey.shade200,
-                                width: isDefault ? 1.5 : 1,
+                        const Spacer(),
+                        PopupMenuButton<String>(
+                          icon: const Icon(LucideIcons.moreVertical, size: 18, color: Colors.grey),
+                          onSelected: (val) async {
+                            if (val == 'default') {
+                              await _addressService.setDefaultAddress(id);
+                              _loadAddresses();
+                            } else if (val == 'delete') {
+                              await _addressService.deleteAddress(id);
+                              _loadAddresses();
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            if (!isDefault)
+                              const PopupMenuItem(
+                                value: 'default',
+                                child: BodyText('Set as Default'),
                               ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.03),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: BodyText('Delete Address', color: Colors.red),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: ColorUtils.forestGreen.withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        label.toUpperCase(),
-                                        style: AppTypography.caption(
-                                          color: ColorUtils.forestGreen,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ),
-                                    if (isDefault) ...[
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: Colors.amber.shade100,
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          'DEFAULT',
-                                          style: AppTypography.caption(
-                                            color: Colors.amber.shade900,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                    const Spacer(),
-                                    PopupMenuButton<String>(
-                                      icon: const Icon(LucideIcons.moreVertical, size: 18, color: Colors.grey),
-                                      onSelected: (val) async {
-                                        if (val == 'default') {
-                                          await _addressService.setDefaultAddress(id);
-                                          _loadAddresses();
-                                        } else if (val == 'delete') {
-                                          await _addressService.deleteAddress(id);
-                                          _loadAddresses();
-                                        }
-                                      },
-                                      itemBuilder: (context) => [
-                                        if (!isDefault)
-                                          const PopupMenuItem(
-                                            value: 'default',
-                                            child: Text('Set as Default'),
-                                          ),
-                                        const PopupMenuItem(
-                                          value: 'delete',
-                                          child: Text('Delete Address', style: TextStyle(color: Colors.red)),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  address,
-                                  style: AppTypography.bodyMedium(
-                                    color: ColorUtils.darkText,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    BodyText(
+                      address,
+                      color: ColorUtils.darkText,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _openAddAddressDialog,
           backgroundColor: ColorUtils.forestGreen,
           icon: const Icon(LucideIcons.plus, color: Colors.white),
-          label: const Text('Add Address', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          label: BodyText(
+            'Add Address',
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );

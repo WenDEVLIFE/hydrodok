@@ -29,7 +29,6 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
       _poolsFuture = _poolingService.getBatchPools();
     });
   }
-
   void _showCreatePoolDialog() {
     debugPrint('BatchPoolingScreen: opening create pool dialog');
     final cropController = TextEditingController();
@@ -63,7 +62,7 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
                   Text('Create Batch Pool',
                       style: AppTypography.heading3(color: ColorUtils.darkText)),
                   IconButton(
-                    icon: const Icon(LucideIcons.x),
+                    icon: const Icon(LucideIcons.x, color: ColorUtils.darkText),
                     onPressed: () => Navigator.of(ctx).pop(),
                   ),
                 ],
@@ -71,10 +70,20 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: cropController,
-                decoration: const InputDecoration(
+                style: AppTypography.bodyMedium(color: ColorUtils.darkText),
+                decoration: InputDecoration(
                   labelText: 'Crop / Produce Name',
+                  labelStyle: AppTypography.bodySmall(
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
                   hintText: 'e.g. Hydroponic Romaine Lettuce',
-                  border: OutlineInputBorder(),
+                  hintStyle: AppTypography.bodyMedium(color: Colors.grey.shade400),
+                  border: const OutlineInputBorder(),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(color: ColorUtils.forestGreen),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -84,11 +93,21 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
                     child: TextField(
                       controller: weightController,
                       keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
+                      const TextInputType.numberWithOptions(decimal: true),
+                      style: AppTypography.bodyMedium(color: ColorUtils.darkText),
+                      decoration: InputDecoration(
                         labelText: 'Target Total Weight (kg)',
+                        labelStyle: AppTypography.bodySmall(
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
                         hintText: 'e.g. 500',
-                        border: OutlineInputBorder(),
+                        hintStyle: AppTypography.bodyMedium(color: Colors.grey.shade400),
+                        border: const OutlineInputBorder(),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: const BorderSide(color: ColorUtils.forestGreen),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -97,11 +116,21 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
                     child: TextField(
                       controller: priceController,
                       keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
+                      const TextInputType.numberWithOptions(decimal: true),
+                      style: AppTypography.bodyMedium(color: ColorUtils.darkText),
+                      decoration: InputDecoration(
                         labelText: 'Target Price (PHP/kg)',
+                        labelStyle: AppTypography.bodySmall(
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
                         hintText: 'e.g. 180',
-                        border: OutlineInputBorder(),
+                        hintStyle: AppTypography.bodyMedium(color: Colors.grey.shade400),
+                        border: const OutlineInputBorder(),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: const BorderSide(color: ColorUtils.forestGreen),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ),
@@ -148,9 +177,11 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
                       }
                     }
                   },
-                  child: const Text('Publish Batch Pool',
-                      style: TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text('Publish Batch Pool',
+                      style: AppTypography.bodyMedium(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      )),
                 ),
               ),
             ],
@@ -159,7 +190,6 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
       ),
     );
   }
-
   void _showJoinPoolDialog(Map<String, dynamic> pool) {
     final qtyController = TextEditingController();
 
@@ -167,11 +197,14 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(LucideIcons.users, color: ColorUtils.forestGreen),
-            SizedBox(width: 8),
-            Text('Pledge Produce to Pool'),
+            const Icon(LucideIcons.users, color: ColorUtils.forestGreen),
+            const SizedBox(width: 8),
+            Text(
+              'Pledge Produce to Pool',
+              style: AppTypography.heading3(color: Colors.white),
+            ),
           ],
         ),
         content: Column(
@@ -181,17 +214,28 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
             Text(
               pool['title'] as String,
               style: AppTypography.bodyMedium(
-                  fontWeight: FontWeight.bold, color: ColorUtils.darkText),
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: qtyController,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
+              style: AppTypography.bodyMedium(color: ColorUtils.darkText),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
                 labelText: 'Quantity to Contribute (kg)',
+                labelStyle: AppTypography.bodySmall(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
                 hintText: 'e.g. 50',
-                border: OutlineInputBorder(),
+                hintStyle: AppTypography.bodyMedium(color: Colors.grey.shade400),
+                border: const OutlineInputBorder(),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: const BorderSide(color: ColorUtils.forestGreen),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ],
@@ -199,11 +243,18 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: AppTypography.bodyMedium(color: Colors.white),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: ColorUtils.forestGreen),
+              backgroundColor: ColorUtils.forestGreen,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
             onPressed: () async {
               final added = double.tryParse(qtyController.text.trim()) ?? 0;
               if (added <= 0) return;
@@ -241,8 +292,13 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
                 }
               }
             },
-            child: const Text('Confirm Pledge',
-                style: TextStyle(color: Colors.white)),
+            child: Text(
+              'Confirm Pledge',
+              style: AppTypography.bodyMedium(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -370,8 +426,10 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
                 Text(
                   'Combine produce yields with neighboring farmers to fulfill bulk commercial orders at higher prices.',
                   style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 12),
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -426,7 +484,7 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: ColorUtils.forestGreen.withValues(alpha: 0.1),
+                  color: const Color(0xFFE8F5E9),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(

@@ -244,8 +244,10 @@ class _PostCardState extends State<_PostCard> {
           .select('full_name, role, avatar_url')
           .eq('id', userId)
           .maybeSingle();
+      debugPrint('Forum profile load for $userId: $result');
       return result;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Forum profile load failed for $userId: $e');
       return null;
     }
   }
@@ -263,8 +265,8 @@ class _PostCardState extends State<_PostCard> {
       builder: (context, profileSnapshot) {
         final profile = profileSnapshot.data;
         final rawName = (profile?['full_name'] as String?)?.trim() ?? '';
-        final authorName = rawName.isNotEmpty ? rawName : 'Farmer';
         final rawRole = (profile?['role'] as String?) ?? 'member';
+        final authorName = rawName.isNotEmpty ? rawName : _capitalize(rawRole);
         final role = _capitalize(rawRole);
         final avatarUrl = (profile?['avatar_url'] as String?) ?? '';
         final initials = _initials(authorName);

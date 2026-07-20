@@ -113,9 +113,11 @@ alter table public.profiles enable row level security;
 drop policy if exists "Users can view own profile" on public.profiles;
 drop policy if exists "Users and Admins view profiles" on public.profiles;
 
+-- Forum/community features require all authenticated users to see basic profile
+-- info (name, role, avatar) of other users.
 create policy "Users and Admins view profiles"
   on public.profiles for select
-  using (auth.uid() = id or public.is_admin());
+  using (auth.uid() = id or public.is_admin() or auth.role() = 'authenticated');
 
 drop policy if exists "Users can update own profile" on public.profiles;
 drop policy if exists "Users and Admins update profiles" on public.profiles;

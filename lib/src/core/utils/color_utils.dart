@@ -80,11 +80,12 @@ class ColorUtils {
 
   // ── Gradients ────────────────────────────────────────────────────────────
 
-  /// Forest → dark forest: primary brand gradient.
+  /// Lighter forest → forest green: primary brand gradient.
+  /// Removes the near-black darkBackground so white text stays readable.
   static LinearGradient get mainGradient => const LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [forestGreen, darkBackground],
+        colors: [Color(0xFF4A7C4E), forestGreen],
       );
 
   /// Terracotta → forest green: energetic CTA gradient.
