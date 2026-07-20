@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/service/product_service.dart';
+import '../../core/service/farm_service.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import 'add_product_dialog.dart';
@@ -21,9 +24,16 @@ class _FarmListingScreenState extends State<FarmListingScreen> {
   late final Stream<List<Map<String, dynamic>>> _farmStream;
   late final Stream<List<Map<String, dynamic>>> _productsStream;
 
+  List<Map<String, dynamic>> _farmImages = [];
+  bool _imagesLoading = false;
+  String? _currentFarmId;
+
+  late final FarmService _farmService;
+
   @override
   void initState() {
     super.initState();
+    _farmService = FarmService(supabase: Supabase.instance.client);
     _initStreams();
   }
 
@@ -42,6 +52,81 @@ class _FarmListingScreenState extends State<FarmListingScreen> {
         .from('products')
         .stream(primaryKey: ['id'])
         .order('created_at', ascending: false);
+  }
+
+  Future<void> _loadFarmImages(String farmId) async {
+    if (_imagesLoading) return;
+    setState(() => _imagesLoading = true);
+    final images = await _farmService.getFarmImages(farmId);
+    if (mounted) setState(() {
+      _farmImages = images;
+      _imagesLoading = false;
+    });
+  }
+
+  Future<void> _addFarmImage(String farmId) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+    if (picked == null) return;
+
+    setState(() => _imagesLoading = true);
+    try {
+      await _farmService.uploadFarmImage(farmId, File(picked.path));
+      await _loadFarmImages(farmId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Photo added!'),
+            backgroundColor: ColorUtils.forestGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _imagesLoading = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _deleteFarmImage(
+      String imageId, String storagePath, String farmId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Photo'),
+        content: const Text('Remove this photo from your farm gallery?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.red.shade600),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child:
+                const Text('Remove', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _farmService.deleteFarmImage(
+          imageId: imageId, storagePath: storagePath);
+      await _loadFarmImages(farmId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      }
+    }
   }
 
   Future<void> _openMapPicker() async {
@@ -223,6 +308,15 @@ class _FarmListingScreenState extends State<FarmListingScreen> {
           final lat = farm['latitude'];
           final lng = farm['longitude'];
           final hasLocation = lat != null && lng != null;
+          final farmId = farm['id'] as String? ?? '';
+
+          // Load images once when farmId is first known or changes
+          if (farmId.isNotEmpty && _currentFarmId != farmId) {
+            _currentFarmId = farmId;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _loadFarmImages(farmId);
+            });
+          }
 
           final (String statusLabel, Color statusColor, IconData statusIcon) = switch (status) {
             'verified' => ('Verified Farm', ColorUtils.sageGreen, LucideIcons.badgeCheck),
@@ -383,6 +477,113 @@ class _FarmListingScreenState extends State<FarmListingScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                   ),
+                ),
+                const SizedBox(height: 24),
+
+                // ── Farm Photos ──────────────────────────────────────────────
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Farm Photos',
+                      style: AppTypography.heading3(color: ColorUtils.darkText),
+                    ),
+                    Text(
+                      '${_farmImages.length} photo${_farmImages.length == 1 ? '' : 's'}',
+                      style: AppTypography.bodySmall(color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 110,
+                  child: _imagesLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _farmImages.length + 1,
+                          itemBuilder: (ctx, index) {
+                            if (index == _farmImages.length) {
+                              return GestureDetector(
+                                onTap: farmId.isNotEmpty
+                                    ? () => _addFarmImage(farmId)
+                                    : null,
+                                child: Container(
+                                  width: 100,
+                                  margin: const EdgeInsets.only(right: 10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: ColorUtils.forestGreen,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(LucideIcons.imagePlus,
+                                          color: ColorUtils.forestGreen, size: 28),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Add Photo',
+                                        style: AppTypography.caption(
+                                          color: ColorUtils.forestGreen,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }
+
+                            final img = _farmImages[index];
+                            final url = img['image_url'] as String? ?? '';
+                            final imgId = img['id'] as String? ?? '';
+                            final path = img['storage_path'] as String? ?? '';
+
+                            return Stack(
+                              children: [
+                                Container(
+                                  width: 100,
+                                  margin: const EdgeInsets.only(right: 10),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    color: Colors.grey.shade200,
+                                    image: url.isNotEmpty
+                                        ? DecorationImage(
+                                            image: NetworkImage(url),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
+                                  ),
+                                  child: url.isEmpty
+                                      ? const Icon(LucideIcons.image, color: Colors.grey)
+                                      : null,
+                                ),
+                                Positioned(
+                                  top: 4,
+                                  right: 14,
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        _deleteFarmImage(imgId, path, farmId),
+                                    child: Container(
+                                      width: 22,
+                                      height: 22,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(LucideIcons.x,
+                                          color: Colors.white, size: 13),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
                 ),
                 const SizedBox(height: 24),
 

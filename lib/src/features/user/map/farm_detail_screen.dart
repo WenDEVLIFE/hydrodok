@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/service/farm_service.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 /// Farm Detail Screen:
@@ -19,14 +20,23 @@ class FarmDetailScreen extends StatefulWidget {
 class _FarmDetailScreenState extends State<FarmDetailScreen> {
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _reviews = [];
+  List<Map<String, dynamic>> _farmImages = [];
   bool _isLoading = true;
   double _averageRating = 0;
   int _reviewCount = 0;
+  int _currentImagePage = 0;
+  final PageController _imagePageController = PageController();
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _imagePageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -89,10 +99,18 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
         }
       }
 
+      // Load farm images
+      List<Map<String, dynamic>> farmImages = [];
+      if (farmId != null) {
+        farmImages = await FarmService(supabase: supabase)
+            .getFarmImages(farmId);
+      }
+
       if (mounted) {
         setState(() {
           _products = products;
           _reviews = reviews;
+          _farmImages = farmImages;
           _averageRating = avgRating;
           _reviewCount = reviewCount;
           _isLoading = false;
@@ -319,7 +337,7 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
                 slivers: [
                   // Header image area
                   SliverAppBar(
-                    expandedHeight: 220,
+                    expandedHeight: 260,
                     pinned: true,
                     backgroundColor: ColorUtils.sageGreen,
                     leading: IconButton(
@@ -327,37 +345,117 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                     flexibleSpace: FlexibleSpaceBar(
-                      background: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              ColorUtils.sageGreen,
-                              ColorUtils.forestGreen.withOpacity(0.7),
-                            ],
-                          ),
-                        ),
-                        child: Stack(
-                          children: [
-                            Positioned(
-                              top: 60,
-                              left: 40,
-                              child: _circle(80, Colors.white.withOpacity(0.15)),
+                      background: _farmImages.isEmpty
+                          // Fallback gradient when no images uploaded yet
+                          ? Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    ColorUtils.sageGreen,
+                                    ColorUtils.forestGreen.withOpacity(0.7),
+                                  ],
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 60,
+                                    left: 40,
+                                    child: _circle(80, Colors.white.withOpacity(0.15)),
+                                  ),
+                                  Positioned(
+                                    top: 100,
+                                    right: 60,
+                                    child: _circle(60, Colors.white.withOpacity(0.1)),
+                                  ),
+                                  Positioned(
+                                    bottom: 40,
+                                    left: 120,
+                                    child: _circle(100, Colors.white.withOpacity(0.12)),
+                                  ),
+                                ],
+                              ),
+                            )
+                          // Image carousel
+                          : Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                PageView.builder(
+                                  controller: _imagePageController,
+                                  itemCount: _farmImages.length,
+                                  onPageChanged: (i) =>
+                                      setState(() => _currentImagePage = i),
+                                  itemBuilder: (context, index) {
+                                    final url = _farmImages[index]['image_url']
+                                            as String? ??
+                                        '';
+                                    return Image.network(
+                                      url,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        color: ColorUtils.sageGreen,
+                                        child: const Icon(
+                                          LucideIcons.image,
+                                          color: Colors.white54,
+                                          size: 40,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                // Dark gradient overlay for readability
+                                Positioned(
+                                  bottom: 0,
+                                  left: 0,
+                                  right: 0,
+                                  child: Container(
+                                    height: 80,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.bottomCenter,
+                                        end: Alignment.topCenter,
+                                        colors: [
+                                          Colors.black.withOpacity(0.55),
+                                          Colors.transparent,
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Dot indicators
+                                if (_farmImages.length > 1)
+                                  Positioned(
+                                    bottom: 12,
+                                    left: 0,
+                                    right: 0,
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: List.generate(
+                                        _farmImages.length,
+                                        (i) => AnimatedContainer(
+                                          duration: const Duration(
+                                              milliseconds: 200),
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 3),
+                                          width:
+                                              _currentImagePage == i ? 20 : 6,
+                                          height: 6,
+                                          decoration: BoxDecoration(
+                                            color: _currentImagePage == i
+                                                ? Colors.white
+                                                : Colors.white54,
+                                            borderRadius:
+                                                BorderRadius.circular(3),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                            Positioned(
-                              top: 100,
-                              right: 60,
-                              child: _circle(60, Colors.white.withOpacity(0.1)),
-                            ),
-                            Positioned(
-                              bottom: 40,
-                              left: 120,
-                              child: _circle(100, Colors.white.withOpacity(0.12)),
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
                     actions: [
                       Container(

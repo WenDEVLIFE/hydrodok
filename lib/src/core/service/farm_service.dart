@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:storage_client/storage_client.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Handles farm profile updates, photo uploads, location coordinates,
@@ -221,5 +220,75 @@ class FarmService {
         } catch (_) {}
       }
     }
+  }
+
+  // ── Farm Images ─────────────────────────────────────────────────────────
+
+  /// Returns all images for [farmId] from the `farm_images` table,
+  /// ordered by creation date ascending.
+  Future<List<Map<String, dynamic>>> getFarmImages(String farmId) async {
+    try {
+      final result = await _supabase
+          .from('farm_images')
+          .select('*')
+          .eq('farm_id', farmId)
+          .order('created_at', ascending: true);
+      return List<Map<String, dynamic>>.from(result);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Uploads [imageFile] to the `farm-images` bucket under
+  /// `{ownerId}/images/{timestamp}.jpg`, inserts a row in `farm_images`,
+  /// and returns the inserted row map (including `id` and `image_url`).
+  Future<Map<String, dynamic>> uploadFarmImage(
+    String farmId,
+    File imageFile,
+  ) async {
+    final ownerId = _supabase.auth.currentUser?.id;
+    if (ownerId == null) throw Exception('Not authenticated');
+
+    final imageId = DateTime.now().microsecondsSinceEpoch.toString();
+    // Use ownerId as the folder prefix — matches the bucket RLS policy
+    final storagePath = '$ownerId/images/$imageId.jpg';
+
+    await _storage.upload(
+      storagePath,
+      imageFile,
+      fileOptions: const FileOptions(
+        upsert: false,
+        contentType: 'image/jpeg',
+      ),
+    );
+
+    final publicUrl = _storage.getPublicUrl(storagePath);
+
+    final inserted = await _supabase
+        .from('farm_images')
+        .insert({
+          'farm_id': farmId,
+          'image_url': publicUrl,
+          'storage_path': storagePath,
+          'created_at': DateTime.now().toIso8601String(),
+        })
+        .select()
+        .single();
+
+    return inserted;
+  }
+
+  /// Deletes a farm image: removes the file from storage then
+  /// deletes the `farm_images` row by [imageId].
+  Future<void> deleteFarmImage({
+    required String imageId,
+    required String storagePath,
+  }) async {
+    // Remove from storage first (non-fatal if already gone)
+    try {
+      await _storage.remove([storagePath]);
+    } catch (_) {}
+
+    await _supabase.from('farm_images').delete().eq('id', imageId);
   }
 }
