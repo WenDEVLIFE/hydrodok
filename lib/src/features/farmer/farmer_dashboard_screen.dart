@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/service/farm_service.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import '../user/forum/forum_screen.dart';
@@ -25,47 +24,24 @@ class FarmerDashboardScreen extends StatefulWidget {
 class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
   int _currentTabIndex = 0;
 
-  // ── Real data from Supabase ─────────────────────────────────────────────
-  String _farmName = 'Loading...';
-  String _farmAddress = '';
-  String _verificationStatus = 'unverified';
-  List<String> _produceTypes = [];
-  bool _isLoading = true;
+  // ── Realtime stream ─────────────────────────────────────────────────────
+  late final Stream<List<Map<String, dynamic>>> _farmStream;
 
   @override
   void initState() {
     super.initState();
-    _loadFarmData();
+    _initStream();
   }
 
-  Future<void> _loadFarmData() async {
-    try {
-      final client = Supabase.instance.client;
-      final user = client.auth.currentUser;
-      if (user == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
+  void _initStream() {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
 
-      // Get farm data including verification_status
-      final farmService = FarmService(supabase: client);
-      final farmData = await farmService.getFarmByOwnerId(user.id);
-
-      if (mounted) {
-        setState(() {
-          _farmName = farmData?['farm_name'] as String? ?? 'No Farm Registered';
-          _farmAddress = farmData?['address'] as String? ?? '';
-          _verificationStatus = farmData?['verification_status'] as String? ?? 'unverified';
-          final types = farmData?['produce_types'];
-          if (types is List) {
-            _produceTypes = types.cast<String>();
-          }
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
-    }
+    // Realtime stream: auto-updates when admin approves/rejects
+    _farmStream = Supabase.instance.client
+        .from('farms')
+        .stream(primaryKey: ['id'])
+        .eq('owner_id', user.id);
   }
 
   @override
@@ -121,9 +97,17 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                       fontSize: 18,
                     ),
                   ),
-                  Text(
-                    _farmName,
-                    style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                  StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: _farmStream,
+                    builder: (context, snapshot) {
+                      final farm = snapshot.data?.isNotEmpty == true
+                          ? snapshot.data!.first
+                          : null;
+                      return Text(
+                        farm?['farm_name'] as String? ?? 'Loading...',
+                        style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -140,163 +124,183 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
             ),
           ],
         ),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : SafeArea(
-                child: RefreshIndicator(
-                  onRefresh: _loadFarmData,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // ── Farm Status & Verification Card ──────────────────────
-                        _buildFarmStatusCard(),
-                        const SizedBox(height: 20),
+        body: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _farmStream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-                        // ── Key Farm Metrics Grid ─────────────────────────────────
-                        Text(
-                          'Farm Overview',
-                          style: AppTypography.heading3(
-                            color: ColorUtils.darkText,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        GridView.count(
-                          crossAxisCount: 2,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.4,
-                          children: [
-                            _buildMetricCard(
-                              title: 'Active Batches',
-                              value: '${_produceTypes.length} Crops',
-                              subtitle: _produceTypes.isNotEmpty
-                                  ? _produceTypes.join(', ')
-                                  : 'No crops registered',
-                              icon: LucideIcons.leaf,
-                              color: ColorUtils.forestGreen,
-                            ),
-                            _buildMetricCard(
-                              title: 'Water / pH Level',
-                              value: '—',
-                              subtitle: 'Connect sensors to view data',
-                              icon: LucideIcons.droplet,
-                              color: const Color(0xFF64B5F6),
-                            ),
-                            _buildMetricCard(
-                              title: 'Tasks Due Today',
-                              value: '—',
-                              subtitle: 'Task manager coming soon',
-                              icon: LucideIcons.checkSquare,
-                              color: ColorUtils.terracotta,
-                            ),
-                            _buildMetricCard(
-                              title: 'Issue Alerts',
-                              value: '0 Active',
-                              subtitle: 'All systems operational',
-                              icon: LucideIcons.shieldCheck,
-                              color: const Color(0xFF81C784),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
+            final farm = snapshot.data?.isNotEmpty == true
+                ? snapshot.data!.first
+                : null;
+            final farmName = farm?['farm_name'] as String? ?? 'No Farm Registered';
+            final farmAddress = farm?['address'] as String? ?? '';
+            final verificationStatus = farm?['verification_status'] as String? ?? 'unverified';
+            final types = farm?['produce_types'];
+            final produceTypes = types is List ? types.cast<String>() : <String>[];
 
-                        // ── Quick Actions ────────────────────────────────────────
-                        Text(
-                          'Quick Actions',
-                          style: AppTypography.heading3(
-                            color: ColorUtils.darkText,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _buildQuickActionButton(
-                              label: 'Log Nutrients',
-                              icon: LucideIcons.droplets,
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Nutrient logging coming soon'),
-                                  ),
-                                );
-                              },
-                            ),
-                            _buildQuickActionButton(
-                              label: 'Add Task',
-                              icon: LucideIcons.calendarPlus,
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Task manager coming soon'),
-                                  ),
-                                );
-                              },
-                            ),
-                            _buildQuickActionButton(
-                              label: 'Report Issue',
-                              icon: LucideIcons.alertTriangle,
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Issue reporter coming soon'),
-                                  ),
-                                );
-                              },
-                            ),
-                            _buildQuickActionButton(
-                              label: 'Farm Map',
-                              icon: LucideIcons.mapPin,
-                              onTap: () {
-                                setState(() => _currentTabIndex = 1);
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
+            return SafeArea(
+              child: RefreshIndicator(
+                onRefresh: () async => setState(() {}),
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── Farm Status & Verification Card ──────────────────────
+                      _buildFarmStatusCard(
+                        farmName: farmName,
+                        farmAddress: farmAddress,
+                        verificationStatus: verificationStatus,
+                      ),
+                      const SizedBox(height: 20),
 
-                        // ── Today's Maintenance Schedule ─────────────────────────
-                        Text(
-                          "Today's Maintenance Schedule",
-                          style: AppTypography.heading3(
-                            color: ColorUtils.darkText,
-                            fontWeight: FontWeight.w700,
+                      // ── Key Farm Metrics Grid ─────────────────────────────────
+                      Text(
+                        'Farm Overview',
+                        style: AppTypography.heading3(
+                          color: ColorUtils.darkText,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 1.4,
+                        children: [
+                          _buildMetricCard(
+                            title: 'Active Batches',
+                            value: '${produceTypes.length} Crops',
+                            subtitle: produceTypes.isNotEmpty
+                                ? produceTypes.join(', ')
+                                : 'No crops registered',
+                            icon: LucideIcons.leaf,
+                            color: ColorUtils.forestGreen,
                           ),
+                          _buildMetricCard(
+                            title: 'Water / pH Level',
+                            value: '—',
+                            subtitle: 'Connect sensors to view data',
+                            icon: LucideIcons.droplet,
+                            color: const Color(0xFF64B5F6),
+                          ),
+                          _buildMetricCard(
+                            title: 'Tasks Due Today',
+                            value: '—',
+                            subtitle: 'Task manager coming soon',
+                            icon: LucideIcons.checkSquare,
+                            color: ColorUtils.terracotta,
+                          ),
+                          _buildMetricCard(
+                            title: 'Issue Alerts',
+                            value: '0 Active',
+                            subtitle: 'All systems operational',
+                            icon: LucideIcons.shieldCheck,
+                            color: const Color(0xFF81C784),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ── Quick Actions ────────────────────────────────────────
+                      Text(
+                        'Quick Actions',
+                        style: AppTypography.heading3(
+                          color: ColorUtils.darkText,
+                          fontWeight: FontWeight.w700,
                         ),
-                        const SizedBox(height: 12),
-                        _buildScheduleTile(
-                          time: '08:00 AM',
-                          title: 'Reservoir pH & EC Test',
-                          subtitle: 'Check water quality',
-                          isDone: true,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildQuickActionButton(
+                            label: 'Log Nutrients',
+                            icon: LucideIcons.droplets,
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Nutrient logging coming soon'),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildQuickActionButton(
+                            label: 'Add Task',
+                            icon: LucideIcons.calendarPlus,
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Task manager coming soon'),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildQuickActionButton(
+                            label: 'Report Issue',
+                            icon: LucideIcons.alertTriangle,
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Issue reporter coming soon'),
+                                ),
+                              );
+                            },
+                          ),
+                          _buildQuickActionButton(
+                            label: 'Farm Map',
+                            icon: LucideIcons.mapPin,
+                            onTap: () {
+                              setState(() => _currentTabIndex = 1);
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ── Today's Maintenance Schedule ─────────────────────────
+                      Text(
+                        "Today's Maintenance Schedule",
+                        style: AppTypography.heading3(
+                          color: ColorUtils.darkText,
+                          fontWeight: FontWeight.w700,
                         ),
-                        const SizedBox(height: 8),
-                        _buildScheduleTile(
-                          time: '01:30 PM',
-                          title: 'Nutrient Solution Top-up',
-                          subtitle: 'Add Masterblend 4-18-38 Formula',
-                          isDone: false,
-                        ),
-                        const SizedBox(height: 8),
-                        _buildScheduleTile(
-                          time: '05:00 PM',
-                          title: 'End-of-Day Inspection',
-                          subtitle: 'Walk through and check all systems',
-                          isDone: false,
-                        ),
-                        const SizedBox(height: 32),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildScheduleTile(
+                        time: '08:00 AM',
+                        title: 'Reservoir pH & EC Test',
+                        subtitle: 'Check water quality',
+                        isDone: true,
+                      ),
+                      const SizedBox(height: 8),
+                      _buildScheduleTile(
+                        time: '01:30 PM',
+                        title: 'Nutrient Solution Top-up',
+                        subtitle: 'Add Masterblend 4-18-38 Formula',
+                        isDone: false,
+                      ),
+                      const SizedBox(height: 8),
+                      _buildScheduleTile(
+                        time: '05:00 PM',
+                        title: 'End-of-Day Inspection',
+                        subtitle: 'Walk through and check all systems',
+                        isDone: false,
+                      ),
+                      const SizedBox(height: 32),
+                    ],
                   ),
                 ),
               ),
+            );
+          },
+        ),
         bottomNavigationBar: _buildBottomNav(),
       ),
     );
@@ -313,10 +317,14 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
 
   // ── Farm Status Card ────────────────────────────────────────────────────
 
-  Widget _buildFarmStatusCard() {
+  Widget _buildFarmStatusCard({
+    required String farmName,
+    required String farmAddress,
+    required String verificationStatus,
+  }) {
     // Determine status badge based on verification_status
     final (String statusLabel, Color statusColor, IconData statusIcon) =
-        switch (_verificationStatus) {
+        switch (verificationStatus) {
       'verified' => ('Verified', ColorUtils.sageGreen, LucideIcons.badgeCheck),
       'pending' => ('Pending', ColorUtils.terracotta, LucideIcons.clock),
       'rejected' => ('Rejected', Colors.red, LucideIcons.xCircle),
@@ -345,7 +353,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
             children: [
               Flexible(
                 child: Text(
-                  _farmName,
+                  farmName,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.heading2(
                     color: ColorUtils.pureWhite,
@@ -377,7 +385,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
               ),
             ],
           ),
-          if (_farmAddress.isNotEmpty) ...[
+          if (farmAddress.isNotEmpty) ...[
             const SizedBox(height: 6),
             Row(
               children: [
@@ -385,7 +393,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
-                    _farmAddress,
+                    farmAddress,
                     overflow: TextOverflow.ellipsis,
                     style: AppTypography.bodySmall(color: Colors.white70),
                   ),
@@ -400,7 +408,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                _verificationStatus == 'verified'
+                verificationStatus == 'verified'
                     ? 'System Status: Optimal'
                     : 'Verification: $statusLabel',
                 style: AppTypography.bodyMedium(

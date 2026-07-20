@@ -10,7 +10,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/models/farm.dart';
-import '../../../core/service/farm_service.dart';
+import '../../../core/repositories/farm_repository.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 
@@ -75,8 +75,8 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _loadVerifiedFarms() async {
     try {
-      final farmService = FarmService(supabase: Supabase.instance.client);
-      final rawList = await farmService.getVerifiedFarms();
+      final farmRepository = SupabaseFarmRepository();
+      final rawList = await farmRepository.getVerifiedFarms();
       if (rawList.isNotEmpty && mounted) {
         final List<Farm> liveFarms = rawList.map((data) {
           final lat = (data['latitude'] as num?)?.toDouble() ?? 14.5995;

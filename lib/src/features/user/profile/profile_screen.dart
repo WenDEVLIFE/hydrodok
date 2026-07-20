@@ -8,7 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/model/user_session.dart';
 import '../../../core/repositories/auth_repository.dart';
-import '../../../core/service/farm_service.dart';
+import '../../../core/repositories/farm_repository.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 import '../../login/login_screen.dart';
@@ -21,7 +21,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  late final FarmService _farmService;
+  late final FarmRepository _farmRepository;
   UserSession? _session;
   bool _isLoading = true;
   bool _isFarmer = false;
@@ -38,7 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _farmService = FarmService(supabase: Supabase.instance.client);
+    _farmRepository = SupabaseFarmRepository();
     _loadSession();
   }
 
@@ -59,7 +59,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (isFarmer) {
           final userId = Supabase.instance.client.auth.currentUser?.id;
           if (userId != null) {
-            final farm = await _farmService.getFarmByOwnerId(userId);
+            final farm = await _farmRepository.getFarmByOwnerId(userId);
             if (farm != null && mounted) {
               setState(() {
                 _farmId = farm['id'] as String?;
@@ -184,7 +184,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId != null) {
-        await _farmService.submitVerification(userId, selectedDoc!, selectedDocType);
+        await _farmRepository.submitVerification(userId, selectedDoc!, selectedDocType);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(

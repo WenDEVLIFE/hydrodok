@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/service/farm_service.dart';
+import '../../../core/repositories/farm_repository.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 
@@ -18,7 +18,7 @@ class FarmManagementScreen extends StatefulWidget {
 }
 
 class _FarmManagementScreenState extends State<FarmManagementScreen> {
-  late final FarmService _farmService;
+  late final FarmRepository _farmRepository;
   bool _isLoading = true;
   String _activeFilter = 'Pending'; // 'Pending', 'Verified', 'Rejected', 'All'
   List<Map<String, dynamic>> _farms = [];
@@ -26,7 +26,7 @@ class _FarmManagementScreenState extends State<FarmManagementScreen> {
   @override
   void initState() {
     super.initState();
-    _farmService = FarmService(supabase: Supabase.instance.client);
+    _farmRepository = SupabaseFarmRepository();
     _fetchFarms();
   }
 
@@ -59,7 +59,7 @@ class _FarmManagementScreenState extends State<FarmManagementScreen> {
 
   Future<void> _approveFarm(String farmId) async {
     try {
-      await _farmService.approveFarmVerification(farmId);
+      await _farmRepository.approveFarmVerification(farmId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -121,7 +121,7 @@ class _FarmManagementScreenState extends State<FarmManagementScreen> {
 
     try {
       final reason = reasonController.text.trim();
-      await _farmService.rejectFarmVerification(farmId, reason: reason);
+      await _farmRepository.rejectFarmVerification(farmId, reason: reason);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Farm Verification Rejected and Farmer Notified.')),

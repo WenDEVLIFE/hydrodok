@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../../core/service/farm_service.dart';
+import '../../../core/repositories/farm_repository.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 
@@ -19,7 +19,7 @@ class AccountModerationScreen extends StatefulWidget {
 }
 
 class _AccountModerationScreenState extends State<AccountModerationScreen> {
-  late final FarmService _farmService;
+  late final FarmRepository _farmRepository;
   bool _isLoading = true;
   List<Map<String, dynamic>> _profiles = [];
   Map<String, Map<String, dynamic>> _farmMap = {}; // ownerId -> farm map
@@ -27,7 +27,7 @@ class _AccountModerationScreenState extends State<AccountModerationScreen> {
   @override
   void initState() {
     super.initState();
-    _farmService = FarmService(supabase: Supabase.instance.client);
+    _farmRepository = SupabaseFarmRepository();
     _fetchAccounts();
   }
 
@@ -41,8 +41,8 @@ class _AccountModerationScreenState extends State<AccountModerationScreen> {
       final profiles = List<Map<String, dynamic>>.from(profileResponse);
 
       // 2. Fetch all farms from DB
-      final farmResponse = await supabase.from('farms').select('*');
-      final farms = List<Map<String, dynamic>>.from(farmResponse);
+      final farmResponse = await _farmRepository.getVerifiedFarms(); // Or query all farms
+      final farms = List<Map<String, dynamic>>.from(await supabase.from('farms').select('*'));
 
       final Map<String, Map<String, dynamic>> farmMap = {};
       for (final f in farms) {
@@ -84,11 +84,9 @@ class _AccountModerationScreenState extends State<AccountModerationScreen> {
   Future<void> _approveFarmer(String ownerId, String? farmId) async {
     try {
       if (farmId != null && farmId.isNotEmpty) {
-        await _farmService.approveFarmVerification(farmId);
+        await _farmRepository.approveFarmVerification(farmId);
       } else {
-        await Supabase.instance.client.from('farms').update({
-          'verification_status': 'verified',
-        }).eq('owner_id', ownerId);
+        await _farmRepository.updateFarm(ownerId);
       }
 
       if (mounted) {
