@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
@@ -308,88 +309,83 @@ class _IssueReportsScreenState extends State<IssueReportsScreen> {
   // ── Table ────────────────────────────────────────────────────────────────
 
   Widget _buildTable() {
-    final reports = _filteredReports;
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: Supabase.instance.client
+          .from('issue_reports')
+          .stream(primaryKey: ['id'])
+          .order('created_at', ascending: false),
+      builder: (context, snapshot) {
+        final raw = snapshot.data ?? [];
+        final dynamicReports = raw.map((r) {
+          final title = r['title'] as String? ?? 'Issue';
+          final desc = r['description'] as String? ?? '';
+          final statusStr = (r['status'] as String? ?? 'under_review').toLowerCase();
+          final rawDate = r['created_at'] as String? ?? '';
+          final date = rawDate.length >= 10 ? rawDate.substring(0, 10) : 'Recent';
 
-    return Column(
-      children: [
-        // Header
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Colors.grey.shade300),
+          final status = switch (statusStr) {
+            'resolved' => ReportStatus.resolved,
+            'in_progress' || 'investigating' => ReportStatus.investigating,
+            _ => ReportStatus.open,
+          };
+
+          return IssueReport(
+            initials: title.isNotEmpty ? title[0].toUpperCase() : 'I',
+            avatarColor: ColorUtils.forestGreen,
+            farmer: r['category'] as String? ?? 'Farmer',
+            issue: '$title — $desc',
+            farmLocation: r['priority'] != null ? 'Priority: ${(r['priority'] as String).toUpperCase()}' : 'Farm',
+            date: date,
+            status: status,
+          );
+        }).toList();
+
+        final reports = dynamicReports.isNotEmpty
+            ? dynamicReports.where((r) {
+                if (_activeFilter == 'Open') return r.status == ReportStatus.open;
+                if (_activeFilter == 'Resolved') return r.status == ReportStatus.resolved;
+                return true;
+              }).toList()
+            : _filteredReports;
+
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+              ),
+              child: Row(
+                children: [
+                  _headerCell('CATEGORY', flex: 2),
+                  _headerCell('ISSUE & DESCRIPTION', flex: 3),
+                  _headerCell('PRIORITY', flex: 2),
+                  _headerCell('DATE', flex: 1),
+                  _headerCell('STATUS', flex: 1),
+                ],
+              ),
             ),
-          ),
-          child: Row(
-            children: [
-              _headerCell('FARMER', flex: 2),
-              _headerCell('ISSUE', flex: 3),
-              _headerCell('FARM LOCATION', flex: 2),
-              _headerCell('DATE', flex: 1),
-              _headerCell('STATUS', flex: 1),
-            ],
-          ),
-        ),
-
-        // Rows
-        Expanded(
-          child: ListView.separated(
-            itemCount: reports.length,
-            separatorBuilder: (_, __) =>
-                Divider(height: 1, color: Colors.grey.shade200),
-            itemBuilder: (context, index) {
-              return _buildRow(reports[index]);
-            },
-          ),
-        ),
-
-        // Footer
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Row(
-            children: [
-              Text(
-                'Showing ${reports.length} of 14 open reports',
-                style: AppTypography.bodySmall(
-                  color: Colors.grey.shade500,
-                ),
+            Expanded(
+              child: ListView.separated(
+                itemCount: reports.length,
+                separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
+                itemBuilder: (context, index) => _buildRow(reports[index]),
               ),
-              const Spacer(),
-              ElevatedButton(
-                onPressed: () {
-                  // TODO: view all reports
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: ColorUtils.forestGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Row(
+                children: [
+                  Text(
+                    'Showing ${reports.length} report${reports.length == 1 ? '' : 's'}',
+                    style: AppTypography.bodySmall(color: Colors.grey.shade500),
                   ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 14,
-                  ),
-                  elevation: 0,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'View All Reports',
-                      style: AppTypography.button(
-                        color: Colors.white,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Icon(LucideIcons.arrowRight, size: 16),
-                  ],
-                ),
+                ],
               ),
-            ],
-          ),
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 
