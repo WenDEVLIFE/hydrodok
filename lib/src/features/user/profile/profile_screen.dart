@@ -41,6 +41,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _rejectionReason;
   String? _docUrl;
 
+  // Farmer rating/review stats (from farm_reviews)
+  double _avgRating = 0;
+  int _reviewCount = 0;
+  int _productCount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -67,12 +72,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (userId != null) {
             final farm = await _farmRepository.getFarmByOwnerId(userId);
             if (farm != null && mounted) {
+              final farmId = farm['id'] as String?;
               setState(() {
-                _farmId = farm['id'] as String?;
+                _farmId = farmId;
                 _verificationStatus = farm['verification_status'] as String? ?? 'unverified';
                 _rejectionReason = farm['rejection_reason'] as String?;
                 _docUrl = farm['verification_doc_url'] as String?;
               });
+
+              // Load real product count
+              try {
+                final productsRes = await Supabase.instance.client
+                    .from('products')
+                    .select('id')
+                    .eq('farmer_id', userId);
+                final count = (productsRes as List).length;
+                if (mounted) setState(() => _productCount = count);
+              } catch (e) {
+                debugPrint('Profile: product count failed: $e');
+              }
+
+              // Load real rating & review count from farm_reviews
+              if (farmId != null) {
+                try {
+                  final reviews = await Supabase.instance.client
+                      .from('farm_reviews')
+                      .select('rating')
+                      .eq('farm_id', farmId);
+                  final list = List<Map<String, dynamic>>.from(reviews);
+                  if (list.isNotEmpty && mounted) {
+                    final total = list.fold<int>(
+                      0, (sum, r) => sum + ((r['rating'] as int?) ?? 0));
+                    setState(() {
+                      _avgRating = total / list.length;
+                      _reviewCount = list.length;
+                    });
+                  }
+                } catch (e) {
+                  debugPrint('Profile: reviews load failed: $e');
+                }
+              }
             }
           }
         }
@@ -250,27 +289,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _buildVerificationBanner(),
                         const SizedBox(height: 24),
                       ],
-
-                      // ── Account mode toggle ───────────────────────
-                      Text(
-                        'Account Mode',
-                        style: AppTypography.subtitle1(
-                          color: ColorUtils.darkText,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildAccountModeToggle(),
-                      const SizedBox(height: 8),
-                      Text(
-                        _isFarmer
-                            ? "Switch anytime — you're currently browsing as a Farmer (seller)"
-                            : "Switch anytime — you're currently browsing as a Consumer (buyer)",
-                        style: AppTypography.bodySmall(
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
 
                       // ── Stats row ─────────────────────────────────
                       _buildStatsRow(),
@@ -558,71 +576,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildAccountModeToggle() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(32),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (_isFarmer) setState(() => _isFarmer = false);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: !_isFarmer ? ColorUtils.forestGreen : Colors.transparent,
-                  borderRadius: BorderRadius.circular(32),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'Consumer',
-                  style: AppTypography.bodyMedium(
-                    color: !_isFarmer ? Colors.white : ColorUtils.darkText,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (!_isFarmer) setState(() => _isFarmer = true);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: _isFarmer ? ColorUtils.forestGreen : Colors.transparent,
-                  borderRadius: BorderRadius.circular(32),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'Farmer',
-                  style: AppTypography.bodyMedium(
-                    color: _isFarmer ? Colors.white : ColorUtils.darkText,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildStatsRow() {
+    // Build star label: e.g. "4.8 ★" or "—" if no reviews
+    final ratingLabel = _isFarmer
+        ? (_reviewCount > 0 ? '${_avgRating.toStringAsFixed(1)} ★' : '— ★')
+        : '—';
+    final reviewLabel = _isFarmer ? '$_reviewCount' : '—';
+
     return Row(
       children: [
-        Expanded(child: _buildStatItem(_isFarmer ? 'Crops' : 'Orders', _isFarmer ? '8' : '12')),
+        Expanded(
+          child: _buildStatItem(
+            _isFarmer ? 'Products' : 'Orders',
+            _isFarmer ? '$_productCount' : '—',
+          ),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _buildStatItem('Rating', '4.9 ★')),
+        Expanded(child: _buildStatItem('Rating', ratingLabel)),
         const SizedBox(width: 12),
-        Expanded(child: _buildStatItem('Reviews', '47')),
+        Expanded(child: _buildStatItem('Reviews', reviewLabel)),
       ],
     );
   }
