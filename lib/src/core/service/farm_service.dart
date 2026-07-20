@@ -140,20 +140,68 @@ class FarmService {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  /// Fetches farm details for a given [ownerId].
+  Future<Map<String, dynamic>?> getFarmByOwnerId(String ownerId) async {
+    final response = await _supabase
+        .from('farms')
+        .select('*')
+        .eq('owner_id', ownerId)
+        .maybeSingle();
+    return response;
+  }
+
   /// Approves a farm's verification request (`verification_status = 'verified'`),
   /// publishing it directly to the public farm map.
   Future<void> approveFarmVerification(String farmId) async {
-    await _supabase.from('farms').update({
+    final response = await _supabase.from('farms').update({
       'verification_status': 'verified',
+      'rejection_reason': null,
       'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', farmId);
+    }).eq('id', farmId).select('owner_id').maybeSingle();
+
+    if (response != null) {
+      final ownerId = response['owner_id'] as String?;
+      if (ownerId != null) {
+        try {
+          await _supabase.from('notifications').insert({
+            'user_id': ownerId,
+            'title': 'Farm Verification Approved! 🎉',
+            'message': 'Your farm has been verified by the Admin and is now published on the live map!',
+            'read': false,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } catch (_) {}
+      }
+    }
   }
 
   /// Rejects a farm's verification request (`verification_status = 'rejected'`).
-  Future<void> rejectFarmVerification(String farmId) async {
-    await _supabase.from('farms').update({
-      'verification_status': 'rejected',
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('id', farmId);
+  Future<void> rejectFarmVerification(String farmId, {String? reason}) async {
+    final farmResponse = await _supabase
+        .from('farms')
+        .update({
+          'verification_status': 'rejected',
+          'rejection_reason': reason ?? 'Verification documents did not meet requirements.',
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', farmId)
+        .select('owner_id, farm_name')
+        .maybeSingle();
+
+    if (farmResponse != null) {
+      final ownerId = farmResponse['owner_id'] as String?;
+      if (ownerId != null) {
+        try {
+          await _supabase.from('notifications').insert({
+            'user_id': ownerId,
+            'title': 'Farm Verification Denied',
+            'message':
+                'Your verification request was denied. Reason: ${reason ?? "Document invalid or unclear"}. Please re-upload your document in your Profile section.',
+            'read': false,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } catch (_) {}
+      }
+    }
   }
 }

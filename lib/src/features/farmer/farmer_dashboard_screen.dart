@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/service/farm_service.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import '../user/forum/forum_screen.dart';
@@ -22,6 +24,49 @@ class FarmerDashboardScreen extends StatefulWidget {
 
 class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
   int _currentTabIndex = 0;
+
+  // ── Real data from Supabase ─────────────────────────────────────────────
+  String _farmName = 'Loading...';
+  String _farmAddress = '';
+  String _verificationStatus = 'unverified';
+  List<String> _produceTypes = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFarmData();
+  }
+
+  Future<void> _loadFarmData() async {
+    try {
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
+      // Get farm data including verification_status
+      final farmService = FarmService(supabase: client);
+      final farmData = await farmService.getFarmByOwnerId(user.id);
+
+      if (mounted) {
+        setState(() {
+          _farmName = farmData?['farm_name'] as String? ?? 'No Farm Registered';
+          _farmAddress = farmData?['address'] as String? ?? '';
+          _verificationStatus = farmData?['verification_status'] as String? ?? 'unverified';
+          final types = farmData?['produce_types'];
+          if (types is List) {
+            _produceTypes = types.cast<String>();
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,7 +122,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                     ),
                   ),
                   Text(
-                    'Pamahalaang Hydro Greens',
+                    _farmName,
                     style: AppTypography.bodySmall(color: Colors.grey.shade600),
                   ),
                 ],
@@ -95,161 +140,163 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
             ),
           ],
         ),
-        body: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: () async {
-              await Future.delayed(const Duration(milliseconds: 600));
-            },
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Farm Status & Verification Card ──────────────────────
-                  _buildFarmStatusCard(),
-                  const SizedBox(height: 20),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SafeArea(
+                child: RefreshIndicator(
+                  onRefresh: _loadFarmData,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── Farm Status & Verification Card ──────────────────────
+                        _buildFarmStatusCard(),
+                        const SizedBox(height: 20),
 
-                  // ── Key Farm Metrics Grid ─────────────────────────────────
-                  Text(
-                    'Farm Overview',
-                    style: AppTypography.heading3(
-                      color: ColorUtils.darkText,
-                      fontWeight: FontWeight.w700,
+                        // ── Key Farm Metrics Grid ─────────────────────────────────
+                        Text(
+                          'Farm Overview',
+                          style: AppTypography.heading3(
+                            color: ColorUtils.darkText,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        GridView.count(
+                          crossAxisCount: 2,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.4,
+                          children: [
+                            _buildMetricCard(
+                              title: 'Active Batches',
+                              value: '${_produceTypes.length} Crops',
+                              subtitle: _produceTypes.isNotEmpty
+                                  ? _produceTypes.join(', ')
+                                  : 'No crops registered',
+                              icon: LucideIcons.leaf,
+                              color: ColorUtils.forestGreen,
+                            ),
+                            _buildMetricCard(
+                              title: 'Water / pH Level',
+                              value: '—',
+                              subtitle: 'Connect sensors to view data',
+                              icon: LucideIcons.droplet,
+                              color: const Color(0xFF64B5F6),
+                            ),
+                            _buildMetricCard(
+                              title: 'Tasks Due Today',
+                              value: '—',
+                              subtitle: 'Task manager coming soon',
+                              icon: LucideIcons.checkSquare,
+                              color: ColorUtils.terracotta,
+                            ),
+                            _buildMetricCard(
+                              title: 'Issue Alerts',
+                              value: '0 Active',
+                              subtitle: 'All systems operational',
+                              icon: LucideIcons.shieldCheck,
+                              color: const Color(0xFF81C784),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // ── Quick Actions ────────────────────────────────────────
+                        Text(
+                          'Quick Actions',
+                          style: AppTypography.heading3(
+                            color: ColorUtils.darkText,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildQuickActionButton(
+                              label: 'Log Nutrients',
+                              icon: LucideIcons.droplets,
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Nutrient logging coming soon'),
+                                  ),
+                                );
+                              },
+                            ),
+                            _buildQuickActionButton(
+                              label: 'Add Task',
+                              icon: LucideIcons.calendarPlus,
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Task manager coming soon'),
+                                  ),
+                                );
+                              },
+                            ),
+                            _buildQuickActionButton(
+                              label: 'Report Issue',
+                              icon: LucideIcons.alertTriangle,
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Issue reporter coming soon'),
+                                  ),
+                                );
+                              },
+                            ),
+                            _buildQuickActionButton(
+                              label: 'Farm Map',
+                              icon: LucideIcons.mapPin,
+                              onTap: () {
+                                setState(() => _currentTabIndex = 1);
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // ── Today's Maintenance Schedule ─────────────────────────
+                        Text(
+                          "Today's Maintenance Schedule",
+                          style: AppTypography.heading3(
+                            color: ColorUtils.darkText,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildScheduleTile(
+                          time: '08:00 AM',
+                          title: 'Reservoir pH & EC Test',
+                          subtitle: 'Check water quality',
+                          isDone: true,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildScheduleTile(
+                          time: '01:30 PM',
+                          title: 'Nutrient Solution Top-up',
+                          subtitle: 'Add Masterblend 4-18-38 Formula',
+                          isDone: false,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildScheduleTile(
+                          time: '05:00 PM',
+                          title: 'End-of-Day Inspection',
+                          subtitle: 'Walk through and check all systems',
+                          isDone: false,
+                        ),
+                        const SizedBox(height: 32),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  GridView.count(
-                    crossAxisCount: 2,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.4,
-                    children: [
-                      _buildMetricCard(
-                        title: 'Active Batches',
-                        value: '4 Crops',
-                        subtitle: 'Lettuce, Spinach, Basil',
-                        icon: LucideIcons.leaf,
-                        color: ColorUtils.forestGreen,
-                      ),
-                      _buildMetricCard(
-                        title: 'Water / pH Level',
-                        value: '6.2 pH',
-                        subtitle: 'EC: 1.8 mS/cm (Optimal)',
-                        icon: LucideIcons.droplet,
-                        color: const Color(0xFF64B5F6),
-                      ),
-                      _buildMetricCard(
-                        title: 'Tasks Due Today',
-                        value: '3 Pending',
-                        subtitle: 'Nutrient refill, check pumps',
-                        icon: LucideIcons.checkSquare,
-                        color: ColorUtils.terracotta,
-                      ),
-                      _buildMetricCard(
-                        title: 'Issue Alerts',
-                        value: '0 Active',
-                        subtitle: 'All systems operational',
-                        icon: LucideIcons.shieldCheck,
-                        color: const Color(0xFF81C784),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // ── Quick Actions ────────────────────────────────────────
-                  Text(
-                    'Quick Actions',
-                    style: AppTypography.heading3(
-                      color: ColorUtils.darkText,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildQuickActionButton(
-                        label: 'Log Nutrients',
-                        icon: LucideIcons.droplets,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Nutrient logging coming soon'),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildQuickActionButton(
-                        label: 'Add Task',
-                        icon: LucideIcons.calendarPlus,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Task manager coming soon'),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildQuickActionButton(
-                        label: 'Report Issue',
-                        icon: LucideIcons.alertTriangle,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Issue reporter coming soon'),
-                            ),
-                          );
-                        },
-                      ),
-                      _buildQuickActionButton(
-                        label: 'Farm Map',
-                        icon: LucideIcons.mapPin,
-                        onTap: () {
-                          setState(() => _currentTabIndex = 1);
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // ── Today's Maintenance Schedule ─────────────────────────
-                  Text(
-                    "Today's Maintenance Schedule",
-                    style: AppTypography.heading3(
-                      color: ColorUtils.darkText,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildScheduleTile(
-                    time: '08:00 AM',
-                    title: 'Reservoir pH & EC Test',
-                    subtitle: 'System 1 - General Trias Unit',
-                    isDone: true,
-                  ),
-                  const SizedBox(height: 8),
-                  _buildScheduleTile(
-                    time: '01:30 PM',
-                    title: 'Nutrient Solution Top-up',
-                    subtitle: 'Add Masterblend 4-18-38 Formula',
-                    isDone: false,
-                  ),
-                  const SizedBox(height: 8),
-                  _buildScheduleTile(
-                    time: '05:00 PM',
-                    title: 'Harvesting Batch #4 - Romaine',
-                    subtitle: '25kg ready for pooling',
-                    isDone: false,
-                  ),
-                  const SizedBox(height: 32),
-                ],
+                ),
               ),
-            ),
-          ),
-        ),
         bottomNavigationBar: _buildBottomNav(),
       ),
     );
@@ -267,6 +314,15 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
   // ── Farm Status Card ────────────────────────────────────────────────────
 
   Widget _buildFarmStatusCard() {
+    // Determine status badge based on verification_status
+    final (String statusLabel, Color statusColor, IconData statusIcon) =
+        switch (_verificationStatus) {
+      'verified' => ('Verified', ColorUtils.sageGreen, LucideIcons.badgeCheck),
+      'pending' => ('Pending', ColorUtils.terracotta, LucideIcons.clock),
+      'rejected' => ('Rejected', Colors.red, LucideIcons.xCircle),
+      _ => ('Unverified', Colors.grey, LucideIcons.badgeAlert),
+    };
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -289,7 +345,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
             children: [
               Flexible(
                 child: Text(
-                  'Pamahalaang Hydro Greens',
+                  _farmName,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.heading2(
                     color: ColorUtils.pureWhite,
@@ -300,20 +356,19 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: ColorUtils.sageGreen.withOpacity(0.2),
+                  color: statusColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: ColorUtils.sageGreen),
+                  border: Border.all(color: statusColor),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(LucideIcons.badgeCheck,
-                        color: ColorUtils.sageGreen, size: 14),
+                    Icon(statusIcon, color: statusColor, size: 14),
                     const SizedBox(width: 4),
                     Text(
-                      'Verified',
+                      statusLabel,
                       style: AppTypography.bodySmall(
-                        color: ColorUtils.sageGreen,
+                        color: statusColor,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -322,17 +377,22 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(LucideIcons.mapPin, color: Colors.white70, size: 14),
-              const SizedBox(width: 4),
-              Text(
-                'General Trias, Cavite',
-                style: AppTypography.bodySmall(color: Colors.white70),
-              ),
-            ],
-          ),
+          if (_farmAddress.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(LucideIcons.mapPin, color: Colors.white70, size: 14),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    _farmAddress,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodySmall(color: Colors.white70),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           const Divider(color: Colors.white24),
           const SizedBox(height: 8),
@@ -340,14 +400,16 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'System Status: Optimal',
+                _verificationStatus == 'verified'
+                    ? 'System Status: Optimal'
+                    : 'Verification: $statusLabel',
                 style: AppTypography.bodyMedium(
-                  color: ColorUtils.sageGreen,
+                  color: statusColor,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               Text(
-                'Last synced 5m ago',
+                'Last synced just now',
                 style: AppTypography.bodySmall(color: Colors.white38),
               ),
             ],

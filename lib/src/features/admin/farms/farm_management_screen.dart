@@ -6,11 +6,10 @@ import '../../../core/service/farm_service.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 
-/// Admin Farm Verification & Map Publishing Management Screen:
-///
-/// Refactored to focus exclusively on reviewing incoming farmer verification
-/// requests, inspecting attached documents & coordinates, and approving
-/// farms to publish them live to the public MapScreen.
+/// Admin Farm Management Screen:
+/// Verification & Map Approval Center where admins review incoming farmer verification
+/// requests, inspect attached document proof, specify denial reasons if rejecting,
+/// and approve verified farms to be published live on the public consumer map.
 class FarmManagementScreen extends StatefulWidget {
   const FarmManagementScreen({super.key});
 
@@ -20,8 +19,8 @@ class FarmManagementScreen extends StatefulWidget {
 
 class _FarmManagementScreenState extends State<FarmManagementScreen> {
   late final FarmService _farmService;
-  String _activeFilter = 'Pending'; // Pending | Verified | Rejected
   bool _isLoading = true;
+  String _activeFilter = 'Pending'; // 'Pending', 'Verified', 'Rejected', 'All'
   List<Map<String, dynamic>> _farms = [];
 
   @override
@@ -34,31 +33,25 @@ class _FarmManagementScreenState extends State<FarmManagementScreen> {
   Future<void> _fetchFarms() async {
     setState(() => _isLoading = true);
     try {
+      final supabase = Supabase.instance.client;
+      var query = supabase.from('farms').select('*');
+
       if (_activeFilter == 'Pending') {
-        _farms = await _farmService.getPendingFarms();
+        query = query.eq('verification_status', 'pending');
       } else if (_activeFilter == 'Verified') {
-        _farms = await _farmService.getVerifiedFarms();
-      } else {
-        final res = await Supabase.instance.client
-            .from('farms')
-            .select('*')
-            .eq('verification_status', 'rejected');
-        _farms = List<Map<String, dynamic>>.from(res);
+        query = query.eq('verification_status', 'verified');
+      } else if (_activeFilter == 'Rejected') {
+        query = query.eq('verification_status', 'rejected');
+      }
+
+      final response = await query;
+      if (mounted) {
+        setState(() {
+          _farms = List<Map<String, dynamic>>.from(response);
+        });
       }
     } catch (_) {
-      // Fallback mock data if network/table not loaded
-      _farms = [
-        {
-          'id': 'farm-1',
-          'farm_name': 'Pamahalaang Hydro Greens',
-          'address': 'General Trias, Cavite',
-          'latitude': 14.3858,
-          'longitude': 120.8804,
-          'produce_types': ['Lettuce', 'Spinach'],
-          'verification_status': 'pending',
-          'verification_doc_url': 'https://example.com/doc.pdf',
-        },
-      ];
+      _farms = [];
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -70,7 +63,7 @@ class _FarmManagementScreenState extends State<FarmManagementScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Farm Approved & Published to Map!'),
+            content: Text('Farm Approved & Published to Public Map!'),
             backgroundColor: ColorUtils.forestGreen,
           ),
         );
@@ -86,14 +79,52 @@ class _FarmManagementScreenState extends State<FarmManagementScreen> {
   }
 
   Future<void> _rejectFarm(String farmId) async {
+    final reasonController = TextEditingController();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Deny Farm Verification'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Specify the reason for rejection (this will be sent to the farmer):',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'e.g., Document unreadable or invalid ID proof',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Confirm Rejection', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     try {
-      await _farmService.rejectFarmVerification(farmId);
+      final reason = reasonController.text.trim();
+      await _farmService.rejectFarmVerification(farmId, reason: reason);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Verification Request Rejected'),
-            backgroundColor: Colors.orange,
-          ),
+          const SnackBar(content: Text('Farm Verification Rejected and Farmer Notified.')),
         );
       }
       _fetchFarms();
@@ -106,6 +137,58 @@ class _FarmManagementScreenState extends State<FarmManagementScreen> {
     }
   }
 
+  void _showDocumentPreview(String docUrl) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Verification Document Proof',
+                    style: AppTypography.heading3(color: ColorUtils.darkText, fontSize: 18),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.x),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  docUrl,
+                  height: 350,
+                  width: double.infinity,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 200,
+                    color: Colors.grey.shade200,
+                    alignment: Alignment.center,
+                    child: const Text('Failed to load document image'),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(ctx).pop(),
+                icon: const Icon(LucideIcons.check),
+                label: const Text('Close Preview'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -114,35 +197,46 @@ class _FarmManagementScreenState extends State<FarmManagementScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header Title ────────────────────────────────────────────────
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Farm Verification & Map Approvals',
-                style: AppTypography.heading2(color: ColorUtils.darkText),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Review incoming farmer registrations, verify document proofs, and approve farms to publish them on the public map.',
-                style: AppTypography.bodyMedium(color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // ── Filter Tabs ─────────────────────────────────────────────────
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildFilterChip('Pending', LucideIcons.clock),
-              const SizedBox(width: 8),
-              _buildFilterChip('Verified', LucideIcons.badgeCheck),
-              const SizedBox(width: 8),
-              _buildFilterChip('Rejected', LucideIcons.xCircle),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Farm Verification & Map Publishing',
+                    style: AppTypography.heading2(color: ColorUtils.darkText),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Review submitted verification documents and publish approved farms to the map.',
+                    style: AppTypography.bodyMedium(color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.refreshCw, color: ColorUtils.forestGreen),
+                onPressed: _fetchFarms,
+              ),
             ],
           ),
           const SizedBox(height: 20),
 
-          // ── Farms List ──────────────────────────────────────────────────
+          // ── Filter Tabs ────────────────────────────────────────────────
+          Row(
+            children: [
+              _buildFilterChip('Pending', LucideIcons.clock),
+              const SizedBox(width: 8),
+              _buildFilterChip('Verified', LucideIcons.checkCheck),
+              const SizedBox(width: 8),
+              _buildFilterChip('Rejected', LucideIcons.xCircle),
+              const SizedBox(width: 8),
+              _buildFilterChip('All', LucideIcons.layers),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // ── Farms List ─────────────────────────────────────────────────
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -206,6 +300,7 @@ class _FarmManagementScreenState extends State<FarmManagementScreen> {
         'Hydroponics';
     final docUrl = farm['verification_doc_url'] as String?;
     final status = farm['verification_status'] as String? ?? 'pending';
+    final rejectionReason = farm['rejection_reason'] as String?;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -286,22 +381,61 @@ class _FarmManagementScreenState extends State<FarmManagementScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Document Proof preview link
+          // Document Proof preview button
           if (docUrl != null && docUrl.isNotEmpty) ...[
-            Row(
-              children: [
-                const Icon(LucideIcons.fileText, size: 16, color: ColorUtils.forestGreen),
-                const SizedBox(width: 6),
-                Text(
-                  'Verification Proof Document Attached',
-                  style: AppTypography.bodySmall(
-                    color: ColorUtils.forestGreen,
-                    fontWeight: FontWeight.w600,
-                  ),
+            InkWell(
+              onTap: () => _showDocumentPreview(docUrl),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: ColorUtils.sageGreen.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: ColorUtils.forestGreen.withOpacity(0.4)),
                 ),
-              ],
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(LucideIcons.fileText, size: 16, color: ColorUtils.forestGreen),
+                    const SizedBox(width: 8),
+                    Text(
+                      'View Attached Document Proof',
+                      style: AppTypography.bodySmall(
+                        color: ColorUtils.forestGreen,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(LucideIcons.externalLink, size: 14, color: ColorUtils.forestGreen),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+          ],
+
+          if (status == 'rejected' && rejectionReason != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.alertTriangle, size: 16, color: Colors.redAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Rejection Reason: $rejectionReason',
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
           ],
 
           // Admin Action Buttons
