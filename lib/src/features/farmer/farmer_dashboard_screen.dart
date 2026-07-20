@@ -704,9 +704,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                             return false;
                           }).toList();
 
-                          final ordersList = filtered.isNotEmpty
-                              ? filtered
-                              : (rawStream.isNotEmpty ? rawStream : _myOrders);
+                          final ordersList = filtered.isNotEmpty ? filtered : _myOrders;
 
                           if (ordersList.isEmpty) {
                             return _buildEmptyState('No orders yet.');

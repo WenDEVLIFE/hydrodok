@@ -17,6 +17,7 @@ import '../../farmer/farm_settings_screen.dart';
 import '../../farmer/farmer_orders_screen.dart';
 import '../../farmer/farmer_requests_screen.dart';
 import 'consumer_orders_screen.dart';
+import 'delivery_addresses_screen.dart';
 import '../../farmer/issue_reports_screen.dart';
 import '../../login/login_screen.dart';
 
@@ -326,6 +327,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               MaterialPageRoute(builder: (_) => const ConsumerOrdersScreen()),
                             );
                           }
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      _buildMenuItem(
+                        title: 'Saved Delivery Addresses',
+                        subtitle: 'Manage default & shipping locations',
+                        icon: LucideIcons.mapPin,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const DeliveryAddressesScreen()),
+                          );
                         },
                       ),
                       const SizedBox(height: 10),

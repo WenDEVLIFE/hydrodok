@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/service/delivery_address_service.dart';
 import '../../../core/service/farm_service.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
+import '../profile/delivery_addresses_screen.dart';
+
 /// Farm Detail Screen:
 /// Shows farm info, available products, reviews, and actions.
 /// Opened from the map when a user taps a farm marker.
@@ -18,6 +21,8 @@ class FarmDetailScreen extends StatefulWidget {
 }
 
 class _FarmDetailScreenState extends State<FarmDetailScreen> {
+  late final FarmService _farmService;
+  late final DeliveryAddressService _addressService;
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _reviews = [];
   List<Map<String, dynamic>> _farmImages = [];
@@ -30,6 +35,8 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _farmService = FarmService(supabase: Supabase.instance.client);
+    _addressService = DeliveryAddressService();
     _loadData();
   }
 
@@ -48,31 +55,18 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
       debugPrint('FarmDetailScreen farm map: ${widget.farm}');
       debugPrint('ownerId: $ownerId, farmId: $farmId');
 
-      // Load approved products for this farmer
+      // Load all products for this farmer (visible even if pending)
       List<Map<String, dynamic>> products = [];
       if (ownerId != null) {
         try {
-          // Try with status filter (after moderation migration)
           final productsResponse = await supabase
               .from('products')
               .select('*')
               .eq('farmer_id', ownerId)
-              .eq('status', 'approved')
               .order('created_at', ascending: false);
           products = List<Map<String, dynamic>>.from(productsResponse);
         } catch (e) {
-          debugPrint('Product query with status failed: $e');
-          // Fallback: query without status filter
-          try {
-            final productsResponse = await supabase
-                .from('products')
-                .select('*')
-                .eq('farmer_id', ownerId)
-                .order('created_at', ascending: false);
-            products = List<Map<String, dynamic>>.from(productsResponse);
-          } catch (e2) {
-            debugPrint('Product query without status also failed: $e2');
-          }
+          debugPrint('Product query failed: $e');
         }
       }
 
@@ -235,45 +229,145 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
 
     final farmId = widget.farm['id'] as String?;
     final productId = product['id'] as String?;
-    final farmerId = product['farmer_id'] as String?;
-    final price = (product['price_per_kg'] as num?)?.toDouble() ?? 0;
+    final farmerId = (product['farmer_id'] as String?)?.isNotEmpty == true
+        ? product['farmer_id'] as String
+        : widget.farm['owner_id'] as String?;
+    final price = (product['price_per_kg'] as num?)?.toDouble() ??
+        (product['price'] as num?)?.toDouble() ?? 0;
 
-    if (farmId == null || productId == null || farmerId == null) return;
+    if (farmId == null || productId == null || farmerId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot place order: missing farm owner details.')),
+      );
+      return;
+    }
+
+    final savedAddresses = await _addressService.getUserAddresses();
+    final defaultAddr = savedAddresses.firstWhere(
+      (a) => a['is_default'] == true,
+      orElse: () => savedAddresses.isNotEmpty ? savedAddresses.first : {},
+    );
 
     final quantityController = TextEditingController(text: '1');
+    final customAddressController = TextEditingController(
+      text: defaultAddr['address'] as String? ?? '',
+    );
+
     final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Order Product'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Price: PHP ${price.toStringAsFixed(0)} / ${product['unit'] ?? 'kg'}'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: quantityController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Quantity',
-                border: OutlineInputBorder(),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: const [
+              Icon(LucideIcons.shoppingBag, color: ColorUtils.forestGreen),
+              SizedBox(width: 8),
+              Text('Confirm Order'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product['name'] as String? ?? 'Product',
+                  style: AppTypography.subtitle1(
+                    color: ColorUtils.darkText,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text('Price: PHP ${price.toStringAsFixed(0)} / ${product['unit'] ?? 'kg'}'),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: quantityController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Delivery Address', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    TextButton.icon(
+                      onPressed: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const DeliveryAddressesScreen()),
+                        );
+                        final updatedList = await _addressService.getUserAddresses();
+                        if (updatedList.isNotEmpty) {
+                          final first = updatedList.first;
+                          setModalState(() {
+                            customAddressController.text = first['address'] as String? ?? '';
+                          });
+                        }
+                      },
+                      icon: const Icon(LucideIcons.mapPin, size: 14),
+                      label: const Text('Manage Saved', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+                if (savedAddresses.isNotEmpty) ...[
+                  DropdownButtonFormField<String>(
+                    value: savedAddresses.any((a) => a['address'] == customAddressController.text)
+                        ? customAddressController.text
+                        : null,
+                    decoration: const InputDecoration(
+                      labelText: 'Select Saved Address',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: savedAddresses.map((addr) {
+                      final labelStr = addr['label'] as String? ?? 'Home';
+                      final textStr = addr['address'] as String? ?? '';
+                      return DropdownMenuItem<String>(
+                        value: textStr,
+                        child: Text(
+                          '[$labelStr] ${textStr.length > 28 ? '${textStr.substring(0, 28)}...' : textStr}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setModalState(() {
+                          customAddressController.text = val;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                TextField(
+                  controller: customAddressController,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Delivery Address Details',
+                    hintText: 'Enter complete shipping address',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: ColorUtils.forestGreen,
+                foregroundColor: Colors.white,
               ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Place Order'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: ColorUtils.forestGreen,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Place Order'),
-          ),
-        ],
       ),
     );
 
@@ -281,6 +375,7 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
 
     final quantity = int.tryParse(quantityController.text) ?? 1;
     final total = price * quantity;
+    final deliveryAddr = customAddressController.text.trim();
 
     if (quantity <= 0) {
       if (mounted) {
@@ -291,11 +386,23 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
       return;
     }
 
+    // Save address if user entered a new one and has no saved addresses
+    if (deliveryAddr.isNotEmpty && savedAddresses.isEmpty) {
+      try {
+        await _addressService.addAddress(
+          address: deliveryAddr,
+          label: 'Home',
+          isDefault: true,
+        );
+      } catch (_) {}
+    }
+
     try {
       await Supabase.instance.client.rpc('create_order_with_items', params: {
         'p_buyer_id': user.id,
         'p_farmer_id': farmerId,
         'p_status': 'pending',
+        'p_delivery_address': deliveryAddr,
         'p_items': [
           {
             'product_id': productId,
@@ -307,7 +414,10 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Order placed!')),
+          const SnackBar(
+            content: Text('Order placed successfully!'),
+            backgroundColor: ColorUtils.forestGreen,
+          ),
         );
       }
     } catch (e) {
@@ -747,12 +857,34 @@ class _FarmDetailScreenState extends State<FarmDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  style: AppTypography.subtitle1(
-                    color: ColorUtils.darkText,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      name,
+                      style: AppTypography.subtitle1(
+                        color: ColorUtils.darkText,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if ((product['status'] as String? ?? 'approved').toLowerCase() == 'pending') ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: ColorUtils.terracotta.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Pending',
+                          style: AppTypography.caption(
+                            color: ColorUtils.terracotta,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(

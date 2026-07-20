@@ -33,17 +33,27 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
         return;
       }
 
-      final response = await Supabase.instance.client
-          .from('orders')
-          .select('''
-            *,
-            order_items(
+      List<dynamic> response;
+      try {
+        response = await Supabase.instance.client
+            .from('orders')
+            .select('''
               *,
-              products:product_id(name, price_per_kg, unit)
-            )
-          ''')
-          .eq('buyer_id', user.id)
-          .order('created_at', ascending: false);
+              order_items(
+                *,
+                products:product_id(*)
+              )
+            ''')
+            .eq('buyer_id', user.id)
+            .order('created_at', ascending: false);
+      } catch (e) {
+        debugPrint('Detailed order_items query failed, falling back to simple orders: $e');
+        response = await Supabase.instance.client
+            .from('orders')
+            .select('*')
+            .eq('buyer_id', user.id)
+            .order('created_at', ascending: false);
+      }
 
       final orders = List<Map<String, dynamic>>.from(response);
 
@@ -109,10 +119,16 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
       ),
       child: Scaffold(
         appBar: AppBar(
-          backgroundColor: ColorUtils.sageGreen,
-          foregroundColor: Colors.white,
+          title: Text(
+            'My Orders',
+            style: AppTypography.heading3(
+              color: ColorUtils.darkText,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          backgroundColor: Colors.white,
           elevation: 0,
-          title: Text('My Orders', style: AppTypography.heading3(color: Colors.white)),
+          iconTheme: const IconThemeData(color: ColorUtils.darkText),
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -161,6 +177,7 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
         (order['total_price'] as num?)?.toDouble() ?? 0;
     final createdAt = order['created_at'] as String? ?? '';
     final farmName = order['farm_name'] as String? ?? 'Unknown Farm';
+    final deliveryAddr = order['delivery_address'] as String? ?? '';
     final items = List<Map<String, dynamic>>.from(order['order_items'] as List<dynamic>? ?? []);
 
     String timeStr = '';
@@ -197,7 +214,7 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _statusColor(status).withOpacity(0.12),
+                  color: _statusColor(status).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -215,14 +232,26 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
             timeStr,
             style: AppTypography.caption(color: Colors.grey.shade500),
           ),
+          if (deliveryAddr.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(LucideIcons.mapPin, size: 12, color: ColorUtils.forestGreen),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    deliveryAddr,
+                    style: AppTypography.caption(color: Colors.grey.shade600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const Divider(height: 24),
-          ...items.map((item) {
-            final product = item['products'] as Map<String, dynamic>?;
-            final name = product?['name'] as String? ?? 'Unknown Product';
-            final quantity = item['quantity'] as int? ?? 0;
-            final subtotal = (item['subtotal'] as num?)?.toDouble() ?? 0;
-            final unit = product?['unit'] as String? ?? 'kg';
-            return Padding(
+          if (items.isEmpty)
+            Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
@@ -230,7 +259,7 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: ColorUtils.sageGreen.withOpacity(0.2),
+                      color: ColorUtils.sageGreen.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(LucideIcons.leaf,
@@ -238,25 +267,16 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: AppTypography.bodySmall(
-                            color: ColorUtils.darkText,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          '$quantity $unit',
-                          style: AppTypography.caption(color: Colors.grey.shade500),
-                        ),
-                      ],
+                    child: Text(
+                      'Produce Order',
+                      style: AppTypography.bodySmall(
+                        color: ColorUtils.darkText,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   Text(
-                    'PHP ${subtotal.toStringAsFixed(0)}',
+                    'PHP ${total.toStringAsFixed(0)}',
                     style: AppTypography.bodySmall(
                       color: ColorUtils.forestGreen,
                       fontWeight: FontWeight.w700,
@@ -264,8 +284,58 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
                   ),
                 ],
               ),
-            );
-          }),
+            )
+          else
+            ...items.map((item) {
+              final product = item['products'] as Map<String, dynamic>?;
+              final name = product?['name'] as String? ?? 'Unknown Product';
+              final quantity = item['quantity'] as int? ?? 0;
+              final subtotal = (item['subtotal'] as num?)?.toDouble() ?? 0;
+              final unit = product?['unit'] as String? ?? 'kg';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: ColorUtils.sageGreen.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(LucideIcons.leaf,
+                          color: ColorUtils.forestGreen, size: 18),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: AppTypography.bodySmall(
+                              color: ColorUtils.darkText,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            '$quantity $unit',
+                            style: AppTypography.caption(color: Colors.grey.shade500),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      'PHP ${subtotal.toStringAsFixed(0)}',
+                      style: AppTypography.bodySmall(
+                        color: ColorUtils.forestGreen,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
           const Divider(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

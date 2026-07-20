@@ -1,41 +1,25 @@
--- =============================================================================
---  Add order_items table and normalize order totals
---  Run this in Supabase SQL Editor.
--- =============================================================================
+-- ==============================================================================
+-- Migration: Order Items Table and Atomic Order Creation RPC
+-- Execute this SQL in your Supabase SQL Editor:
+-- https://supabase.com/dashboard/project/_/sql/new
+-- ==============================================================================
 
--- ── Add order_items table (idempotent) ─────────────────────────────────────
+-- ── Create order_items table ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.order_items (
-  id          uuid primary key default gen_random_uuid(),
-  order_id    uuid not null references public.orders(id) on delete cascade,
-  product_id  uuid not null references public.products(id) on delete cascade,
-  quantity    integer not null default 1,
-  subtotal    numeric(10,2) not null default 0,
-  created_at  timestamptz not null default now()
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  order_id uuid REFERENCES public.orders(id) ON DELETE CASCADE,
+  product_id uuid REFERENCES public.products(id) ON DELETE SET NULL,
+  quantity integer NOT NULL CHECK (quantity > 0),
+  subtotal numeric(10,2),
+  CONSTRAINT order_items_pkey PRIMARY KEY (id)
 );
 
--- ── Ensure both total and total_price columns exist on orders table ──────────
-ALTER TABLE public.orders
-  ADD COLUMN IF NOT EXISTS total numeric(10,2) default 0,
-  ADD COLUMN IF NOT EXISTS total_price numeric(10,2) default 0;
-
--- ── Make legacy single-product columns nullable (if they exist) ───────────────
-DO $$
-BEGIN
-  ALTER TABLE public.orders ALTER COLUMN product_id DROP NOT NULL;
-EXCEPTION WHEN undefined_column THEN NULL;
-END $$;
-
-DO $$
-BEGIN
-  ALTER TABLE public.orders ALTER COLUMN quantity DROP NOT NULL;
-EXCEPTION WHEN undefined_column THEN NULL;
-END $$;
-
--- ── RLS Policies for order_items ─────────────────────────────────────────────
+-- ── Enable RLS ────────────────────────────────────────────────────────────────
 ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Farmers view order items" ON public.order_items;
-CREATE POLICY "Farmers view order items"
+-- ── RLS Policies ─────────────────────────────────────────────────────────────
+DROP POLICY IF EXISTS "Farmers select order items" ON public.order_items;
+CREATE POLICY "Farmers select order items"
   ON public.order_items FOR select
   USING (
     EXISTS (
@@ -45,8 +29,8 @@ CREATE POLICY "Farmers view order items"
     )
   );
 
-DROP POLICY IF EXISTS "Buyers view order items" ON public.order_items;
-CREATE POLICY "Buyers view order items"
+DROP POLICY IF EXISTS "Buyers select order items" ON public.order_items;
+CREATE POLICY "Buyers select order items"
   ON public.order_items FOR select
   USING (
     EXISTS (
@@ -73,14 +57,20 @@ CREATE POLICY "Buyers update own orders"
   ON public.orders FOR update
   USING (auth.uid() = buyer_id);
 
--- ── Atomic Order Creation Function ───────────────────────────────────────────
+-- ── Add delivery_address column to orders if not present ─────────────────────
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS delivery_address text DEFAULT ''::text;
+
+-- ── Atomic Order Creation Functions ───────────────────────────────────────────
+DROP FUNCTION IF EXISTS public.create_order_with_items(uuid, uuid, text, jsonb, text);
 DROP FUNCTION IF EXISTS public.create_order_with_items(uuid, uuid, text, jsonb);
 
+-- 1. Main 5-parameter function
 CREATE OR REPLACE FUNCTION public.create_order_with_items(
   p_buyer_id uuid,
   p_farmer_id uuid,
   p_status text,
-  p_items jsonb
+  p_items jsonb,
+  p_delivery_address text DEFAULT ''::text
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -91,10 +81,16 @@ DECLARE
   v_item jsonb;
   v_total numeric(10,2) := 0;
 BEGIN
-  -- Create the order header using `total` column
-  INSERT INTO public.orders (buyer_id, farmer_id, status, total)
-  VALUES (p_buyer_id, p_farmer_id, p_status, 0)
-  RETURNING id INTO v_order_id;
+  -- Create the order header using `total` and `delivery_address`
+  BEGIN
+    INSERT INTO public.orders (buyer_id, farmer_id, status, total, delivery_address)
+    VALUES (p_buyer_id, p_farmer_id, p_status, 0, COALESCE(p_delivery_address, ''))
+    RETURNING id INTO v_order_id;
+  EXCEPTION WHEN undefined_column THEN
+    INSERT INTO public.orders (buyer_id, farmer_id, status, total)
+    VALUES (p_buyer_id, p_farmer_id, p_status, 0)
+    RETURNING id INTO v_order_id;
+  END;
 
   -- Insert items and calculate total
   FOR v_item IN SELECT jsonb_array_elements(p_items)
@@ -125,7 +121,24 @@ BEGIN
 END;
 $$;
 
--- Only authenticated users can create orders via RPC
-REVOKE ALL ON FUNCTION public.create_order_with_items(uuid, uuid, text, jsonb) FROM PUBLIC;
+-- 2. Backwards-compatible 4-parameter overload function
+CREATE OR REPLACE FUNCTION public.create_order_with_items(
+  p_buyer_id uuid,
+  p_farmer_id uuid,
+  p_status text,
+  p_items jsonb
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN public.create_order_with_items(p_buyer_id, p_farmer_id, p_status, p_items, '');
+END;
+$$;
+
+-- Grant permissions for both function signatures
+GRANT EXECUTE ON FUNCTION public.create_order_with_items(uuid, uuid, text, jsonb, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.create_order_with_items(uuid, uuid, text, jsonb, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.create_order_with_items(uuid, uuid, text, jsonb) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.create_order_with_items(uuid, uuid, text, jsonb) TO anon;
+GRANT EXECUTE ON FUNCTION public.create_order_with_items(uuid, uuid, text, jsonb) TO service_role;

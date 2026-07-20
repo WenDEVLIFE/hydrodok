@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Handles product CRUD and order management for farmers.
@@ -134,13 +135,35 @@ class ProductService {
     final user = _supabase.auth.currentUser;
     if (user == null) return [];
 
-    final result = await _supabase
-        .from('orders')
-        .select('*, products(name, unit, price_per_kg)')
-        .eq('farmer_id', user.id)
-        .order('created_at', ascending: false);
+    try {
+      final result = await _supabase
+          .from('orders')
+          .select('''
+            *,
+            order_items(
+              *,
+              products:product_id(*)
+            )
+          ''')
+          .eq('farmer_id', user.id)
+          .order('created_at', ascending: false);
 
-    return List<Map<String, dynamic>>.from(result);
+      return List<Map<String, dynamic>>.from(result);
+    } catch (e) {
+      debugPrint('getMyOrders detailed query failed, falling back to simple orders: $e');
+      try {
+        final result = await _supabase
+            .from('orders')
+            .select('*')
+            .eq('farmer_id', user.id)
+            .order('created_at', ascending: false);
+
+        return List<Map<String, dynamic>>.from(result);
+      } catch (e2) {
+        debugPrint('getMyOrders simple query also failed: $e2');
+        return [];
+      }
+    }
   }
 
   /// Realtime stream of orders for the current farmer.

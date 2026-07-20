@@ -17,10 +17,32 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
   String _selectedFilter = 'All'; // All | Pending | Confirmed | In Transit | Delivered | Cancelled
   late final Stream<List<Map<String, dynamic>>> _ordersStream;
 
+  List<Map<String, dynamic>> _initialOrders = [];
+
   @override
   void initState() {
     super.initState();
     _initOrdersStream();
+    _loadInitialOrders();
+  }
+
+  Future<void> _loadInitialOrders() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      final response = await Supabase.instance.client
+          .from('orders')
+          .select('*')
+          .eq('farmer_id', user.id)
+          .order('created_at', ascending: false);
+      if (mounted) {
+        setState(() {
+          _initialOrders = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      debugPrint('FarmerOrdersScreen initial load error: $e');
+    }
   }
 
   void _initOrdersStream() {
@@ -149,9 +171,15 @@ class _FarmerOrdersScreenState extends State<FarmerOrdersScreen> {
             child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _ordersStream,
               builder: (context, snapshot) {
-                final rawList = snapshot.data ?? [];
+                final rawList = snapshot.hasData && snapshot.data!.isNotEmpty
+                    ? snapshot.data!
+                    : _initialOrders;
 
+                final user = Supabase.instance.client.auth.currentUser;
                 final filtered = rawList.where((o) {
+                  if (user != null && o['farmer_id'] != null && o['farmer_id'] != user.id) {
+                    return false;
+                  }
                   final status = (o['status'] as String? ?? 'pending').toLowerCase();
                   if (_selectedFilter == 'Pending') return status == 'pending';
                   if (_selectedFilter == 'Confirmed') return status == 'confirmed';
