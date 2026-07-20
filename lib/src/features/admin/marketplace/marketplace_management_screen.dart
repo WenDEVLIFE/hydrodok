@@ -66,11 +66,17 @@ class _MarketplaceManagementScreenState
           .eq('id', productId)
           .maybeSingle();
 
-      await Supabase.instance.client.from('products').update({
-        'status': 'approved',
-        'rejection_reason': null,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', productId);
+      try {
+        await Supabase.instance.client.from('products').update({
+          'status': 'approved',
+          'rejection_reason': null,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', productId);
+      } catch (_) {
+        await Supabase.instance.client.from('products').update({
+          'status': 'approved',
+        }).eq('id', productId);
+      }
 
       // Notify the farmer
       final farmerId = productData?['farmer_id'] as String?;
@@ -152,15 +158,21 @@ class _MarketplaceManagementScreenState
       // Get product with farm owner info for notification
       final productData = await Supabase.instance.client
           .from('products')
-          .select('name, farms(owner_id)')
+          .select('name, farmer_id')
           .eq('id', productId)
           .maybeSingle();
 
-      await Supabase.instance.client.from('products').update({
-        'status': 'rejected',
-        'rejection_reason': reason.isEmpty ? 'Did not meet requirements.' : reason,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', productId);
+      try {
+        await Supabase.instance.client.from('products').update({
+          'status': 'rejected',
+          'rejection_reason': reason.isEmpty ? 'Did not meet requirements.' : reason,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', productId);
+      } catch (_) {
+        await Supabase.instance.client.from('products').update({
+          'status': 'rejected',
+        }).eq('id', productId);
+      }
 
       // Notify the farmer
       final ownerId = productData?['farms']?['owner_id'] as String?;

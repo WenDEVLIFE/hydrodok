@@ -216,13 +216,18 @@ alter table public.products
   add column if not exists farmer_id uuid,
   add column if not exists farm_id uuid,
   add column if not exists name text,
+  add column if not exists product_name text,
   add column if not exists description text,
   add column if not exists price_per_kg numeric default 0,
+  add column if not exists price numeric default 0,
   add column if not exists unit text default 'kg',
   add column if not exists stock_quantity integer default 0,
+  add column if not exists stock integer default 0,
   add column if not exists image_url text default '',
   add column if not exists status text default 'pending',
-  add column if not exists rejection_reason text;
+  add column if not exists rejection_reason text,
+  add column if not exists created_at timestamptz default now(),
+  add column if not exists updated_at timestamptz default now();
 
 alter table public.products enable row level security;
 
