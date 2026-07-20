@@ -32,26 +32,45 @@ class _MarketplaceManagementScreenState
     setState(() => _isLoading = true);
     try {
       final supabase = Supabase.instance.client;
-      var query = supabase
-          .from('products')
-          .select('*, profiles!farmer_id(full_name)');
+      List<Map<String, dynamic>> rawList = [];
 
-      if (_activeFilter == 'Pending') {
-        query = query.eq('status', 'pending');
-      } else if (_activeFilter == 'Approved') {
-        query = query.eq('status', 'approved');
-      } else if (_activeFilter == 'Rejected') {
-        query = query.eq('status', 'rejected');
+      try {
+        var query = supabase
+            .from('products')
+            .select('*, profiles!farmer_id(full_name)');
+
+        if (_activeFilter == 'Pending') {
+          query = query.or('status.eq.pending,status.eq.Pending');
+        } else if (_activeFilter == 'Approved') {
+          query = query.or('status.eq.approved,status.eq.Approved,status.eq.active,status.eq.Active');
+        } else if (_activeFilter == 'Rejected') {
+          query = query.or('status.eq.rejected,status.eq.Rejected');
+        }
+
+        final response = await query.order('created_at', ascending: false);
+        rawList = List<Map<String, dynamic>>.from(response);
+      } catch (_) {
+        var query = supabase.from('products').select('*');
+
+        if (_activeFilter == 'Pending') {
+          query = query.or('status.eq.pending,status.eq.Pending');
+        } else if (_activeFilter == 'Approved') {
+          query = query.or('status.eq.approved,status.eq.Approved,status.eq.active,status.eq.Active');
+        } else if (_activeFilter == 'Rejected') {
+          query = query.or('status.eq.rejected,status.eq.Rejected');
+        }
+
+        final response = await query.order('created_at', ascending: false);
+        rawList = List<Map<String, dynamic>>.from(response);
       }
 
-      final response = await query.order('created_at', ascending: false);
       if (mounted) {
         setState(() {
-          _products = List<Map<String, dynamic>>.from(response);
+          _products = rawList;
         });
       }
     } catch (_) {
-      _products = [];
+      if (mounted) setState(() => _products = []);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

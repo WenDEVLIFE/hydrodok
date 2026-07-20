@@ -237,13 +237,10 @@ create policy "Farmers can insert own products"
   with check (auth.uid() = farmer_id or auth.role() = 'authenticated');
 
 drop policy if exists "Farmers, Consumers, and Admins view products" on public.products;
-create policy "Farmers, Consumers, and Admins view products"
+drop policy if exists "Anyone can view products" on public.products;
+create policy "Anyone can view products"
   on public.products for select
-  using (
-    auth.uid() = farmer_id
-    or status = 'approved'
-    or public.is_admin()
-  );
+  using (true);
 
 drop policy if exists "Farmers and Admins update products" on public.products;
 create policy "Farmers and Admins update products"

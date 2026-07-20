@@ -90,13 +90,26 @@ class ProductService {
     final user = _supabase.auth.currentUser;
     if (user == null) return [];
 
-    final result = await _supabase
-        .from('products')
-        .select('*')
-        .eq('farmer_id', user.id)
-        .order('created_at', ascending: false);
+    try {
+      final result = await _supabase
+          .from('products')
+          .select('*')
+          .eq('farmer_id', user.id)
+          .order('created_at', ascending: false);
 
-    return List<Map<String, dynamic>>.from(result);
+      return List<Map<String, dynamic>>.from(result);
+    } catch (_) {
+      try {
+        final result = await _supabase
+            .from('products')
+            .select('*')
+            .eq('farmer_id', user.id);
+
+        return List<Map<String, dynamic>>.from(result);
+      } catch (_) {
+        return [];
+      }
+    }
   }
 
   /// Realtime stream of products for the current farmer.
