@@ -8,6 +8,12 @@ import '../../core/service/product_service.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 import 'add_product_dialog.dart';
+import 'batch_pooling_screen.dart';
+import 'farm_listing_screen.dart';
+import 'farm_settings_screen.dart';
+import 'farmer_orders_screen.dart';
+import 'farmer_requests_screen.dart';
+import 'issue_reports_screen.dart';
 import '../onboarding/farm_map_picker_dialog.dart';
 import '../user/forum/forum_screen.dart';
 import '../user/map/map_screen.dart';
@@ -245,14 +251,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                             color: ColorUtils.forestGreen,
                           ),
                           _buildMetricCard(
-                            title: 'Water / pH Level',
-                            value: '—',
-                            subtitle: 'Connect sensors to view data',
-                            icon: LucideIcons.droplet,
-                            color: const Color(0xFF64B5F6),
-                          ),
-                          _buildMetricCard(
-                            title: 'Tasks Due Today',
+                            title: 'Tasks',
                             value: '—',
                             subtitle: 'Task manager coming soon',
                             icon: LucideIcons.checkSquare,
@@ -313,10 +312,8 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                             label: 'Report Issue',
                             icon: LucideIcons.alertTriangle,
                             onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Issue reporter coming soon'),
-                                ),
+                              Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const IssueReportsScreen()),
                               );
                             },
                           ),
@@ -332,7 +329,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                       const SizedBox(height: 16),
 
                       // ── Set Farm Location Button ──────────────────────────────
-                      SizedBox(
+                     SizedBox(
                         width: double.infinity,
                         child: OutlinedButton.icon(
                           onPressed: _openMapPicker,
@@ -349,33 +346,6 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-
-                      // ── Tasks ───────────────────────────────────────────────
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Tasks',
-                            style: AppTypography.heading3(
-                              color: ColorUtils.darkText,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          TextButton.icon(
-                            onPressed: () {
-                              final farmId = farm?['id'] as String?;
-                              if (farmId != null) _showAddTaskDialog(farmId);
-                            },
-                            icon: const Icon(LucideIcons.plus, size: 16),
-                            label: const Text('Add Task'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: ColorUtils.forestGreen,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // ── Tasks ───────────────────────────────────────────────
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -407,28 +377,7 @@ class _FarmerDashboardScreenState extends State<FarmerDashboardScreen> {
                         builder: (context, taskSnapshot) {
                           final tasksList = taskSnapshot.data ?? _myTasks;
                           if (tasksList.isEmpty) {
-                            return Column(
-                              children: [
-                                _buildScheduleTile(
-                                  time: '08:00 AM',
-                                  title: 'Reservoir pH & EC Test',
-                                  subtitle: 'Check water quality',
-                                  isDone: true,
-                                ),
-                                _buildScheduleTile(
-                                  time: '01:30 PM',
-                                  title: 'Nutrient Solution Top-up',
-                                  subtitle: 'Add Masterblend 4-18-38 Formula',
-                                  isDone: false,
-                                ),
-                                _buildScheduleTile(
-                                  time: '05:00 PM',
-                                  title: 'End-of-Day Inspection',
-                                  subtitle: 'Walk through and check all systems',
-                                  isDone: false,
-                                ),
-                              ],
-                            );
+                            return Center(child: Text("No tasks."));
                           }
 
                           return Column(
