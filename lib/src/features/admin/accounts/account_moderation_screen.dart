@@ -1,424 +1,333 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/service/farm_service.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 
-// ── Data Model ─────────────────────────────────────────────────────────────
+/// Admin Account Moderation & Verification Approval Screen:
+///
+/// Fetches real registered user accounts (Farmers & Consumers) from Supabase
+/// `profiles` and `farms` tables. Admins can view account details, check
+/// verification status, and approve pending farmer accounts to publish them to the map.
+class AccountModerationScreen extends StatefulWidget {
+  const AccountModerationScreen({super.key});
 
-enum AccountStatus { flagged, underReview, cleared }
-
-class ModeratedAccount {
-  final String id;
-  final String initials;
-  final Color avatarColor;
-  final String name;
-  final String handle;
-  final String role; // Farmer or Consumer
-  final String flaggedReason;
-  final int reportCount;
-  final AccountStatus status;
-
-  const ModeratedAccount({
-    required this.id,
-    required this.initials,
-    required this.avatarColor,
-    required this.name,
-    required this.handle,
-    required this.role,
-    required this.flaggedReason,
-    required this.reportCount,
-    required this.status,
-  });
+  @override
+  State<AccountModerationScreen> createState() => _AccountModerationScreenState();
 }
 
-const _accounts = <ModeratedAccount>[
-  ModeratedAccount(
-    id: '1',
-    initials: 'J',
-    avatarColor: Color(0xFF2979FF),
-    name: 'J. Villanueva',
-    handle: '@consumer_jv22',
-    role: 'Consumer',
-    flaggedReason: 'Flagged: did not pay after pickup (2 reports)',
-    reportCount: 3,
-    status: AccountStatus.flagged,
-  ),
-  ModeratedAccount(
-    id: '2',
-    initials: '"',
-    avatarColor: ColorUtils.forestGreen,
-    name: '"GreenHarvest Co-op"',
-    handle: '@greenharvest_ph',
-    role: 'Farmer',
-    flaggedReason: 'Flagged: fake farm listing, no verified location',
-    reportCount: 5,
-    status: AccountStatus.flagged,
-  ),
-  ModeratedAccount(
-    id: '3',
-    initials: 'R',
-    avatarColor: Color(0xFF2979FF),
-    name: 'R. Domingo',
-    handle: '@rdomingo_buyer',
-    role: 'Consumer',
-    flaggedReason: 'Flagged: harassment in community forum',
-    reportCount: 1,
-    status: AccountStatus.underReview,
-  ),
-  ModeratedAccount(
-    id: '4',
-    initials: 'M',
-    avatarColor: ColorUtils.forestGreen,
-    name: 'M. Espiritu',
-    handle: '@mespiritu_farm',
-    role: 'Farmer',
-    flaggedReason: 'Cleared — verified real farm, no action taken',
-    reportCount: 0,
-    status: AccountStatus.cleared,
-  ),
-];
+class _AccountModerationScreenState extends State<AccountModerationScreen> {
+  late final FarmService _farmService;
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _profiles = [];
+  Map<String, Map<String, dynamic>> _farmMap = {}; // ownerId -> farm map
 
-// ── Screen Widget ──────────────────────────────────────────────────────────
+  @override
+  void initState() {
+    super.initState();
+    _farmService = FarmService(supabase: Supabase.instance.client);
+    _fetchAccounts();
+  }
 
-class AccountModerationScreen extends StatelessWidget {
-  const AccountModerationScreen({super.key});
+  Future<void> _fetchAccounts() async {
+    setState(() => _isLoading = true);
+    try {
+      final supabase = Supabase.instance.client;
+
+      // 1. Fetch all user profiles from DB
+      final profileResponse = await supabase.from('profiles').select('*');
+      final profiles = List<Map<String, dynamic>>.from(profileResponse);
+
+      // 2. Fetch all farms from DB
+      final farmResponse = await supabase.from('farms').select('*');
+      final farms = List<Map<String, dynamic>>.from(farmResponse);
+
+      final Map<String, Map<String, dynamic>> farmMap = {};
+      for (final f in farms) {
+        final ownerId = f['owner_id'] as String?;
+        if (ownerId != null) {
+          farmMap[ownerId] = f;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _profiles = profiles;
+          _farmMap = farmMap;
+        });
+      }
+    } catch (_) {
+      // Fallback mock accounts if offline
+      _profiles = [
+        {
+          'id': 'user-1',
+          'full_name': 'Rosa Santos (Farmer)',
+          'role': 'farmer',
+          'contact_number': '09171234567',
+          'onboarding_completed': true,
+        },
+        {
+          'id': 'user-2',
+          'full_name': 'Juan Dela Cruz (Consumer)',
+          'role': 'consumer',
+          'contact_number': '09189876543',
+          'onboarding_completed': true,
+        },
+      ];
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _approveFarmer(String ownerId, String? farmId) async {
+    try {
+      if (farmId != null && farmId.isNotEmpty) {
+        await _farmService.approveFarmVerification(farmId);
+      } else {
+        await Supabase.instance.client.from('farms').update({
+          'verification_status': 'verified',
+        }).eq('owner_id', ownerId);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Farmer Verified & Published to Map!'),
+            backgroundColor: ColorUtils.forestGreen,
+          ),
+        );
+      }
+      _fetchAccounts();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error approving farmer: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.all(28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Title & Subtitle ──────────────────────────────────────────
-          Text(
-            'Account Moderation',
-            style: AppTypography.heading2(
-              color: ColorUtils.darkText,
-            ),
+          // ── Header Title ────────────────────────────────────────────────
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'User Account Moderation & Verification',
+                    style: AppTypography.heading2(color: ColorUtils.darkText),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Manage registered farmers & consumers live from Supabase. Review and approve farm verifications.',
+                    style: AppTypography.bodyMedium(color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.refreshCw, color: ColorUtils.forestGreen),
+                onPressed: _fetchAccounts,
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Review flagged accounts and remove confirmed scams',
-            style: AppTypography.bodyMedium(
-              color: Colors.grey.shade600,
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // ── Warning Banner ────────────────────────────────────────────
-          _buildWarningBanner(),
           const SizedBox(height: 24),
 
           // ── Accounts List ──────────────────────────────────────────────
           Expanded(
-            child: ListView.separated(
-              itemCount: _accounts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 14),
-              itemBuilder: (context, index) {
-                return _AccountCard(account: _accounts[index]);
-              },
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _profiles.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No registered user accounts found.',
+                          style: AppTypography.bodyLarge(color: Colors.grey.shade600),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _profiles.length,
+                        itemBuilder: (ctx, index) {
+                          final profile = _profiles[index];
+                          final userId = profile['id'] as String? ?? '';
+                          final farm = _farmMap[userId];
+                          return _buildAccountCard(profile, farm);
+                        },
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildWarningBanner() {
+  Widget _buildAccountCard(
+    Map<String, dynamic> profile,
+    Map<String, dynamic>? farm,
+  ) {
+    final userId = profile['id'] as String? ?? '';
+    final fullName = profile['full_name'] as String? ?? 'Unnamed User';
+    final role = (profile['role'] as String? ?? 'consumer').toUpperCase();
+    final contact = profile['contact_number'] as String? ?? 'No contact';
+    final isFarmer = role.toLowerCase() == 'farmer';
+
+    final farmId = farm?['id'] as String?;
+    final farmName = farm?['farm_name'] as String? ?? 'No farm record';
+    final farmAddress = farm?['address'] as String? ?? 'No address';
+    final verificationStatus =
+        farm?['verification_status'] as String? ?? 'unverified';
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF3E0), // Light amber/orange
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: ColorUtils.terracotta,
-          width: 1.2,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: ColorUtils.terracotta.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: const Icon(
-              LucideIcons.alertTriangle,
-              color: ColorUtils.terracotta,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '3 accounts flagged by farmers this week for suspected scam activity',
-                  style: AppTypography.subtitle2(
-                    color: ColorUtils.darkText,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Review evidence before removing an account — action cannot be undone',
-                  style: AppTypography.bodySmall(
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Account Card Widget ────────────────────────────────────────────────────
-
-class _AccountCard extends StatelessWidget {
-  final ModeratedAccount account;
-  const _AccountCard({required this.account});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Avatar
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: account.avatarColor,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              account.initials,
-              style: AppTypography.heading4(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          const SizedBox(width: 16),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: isFarmer ? ColorUtils.sageGreen : Colors.blue.shade100,
+                    radius: 22,
+                    child: Icon(
+                      isFarmer ? LucideIcons.sprout : LucideIcons.user,
+                      color: isFarmer ? ColorUtils.darkText : Colors.blue.shade900,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fullName,
+                        style: AppTypography.heading3(color: ColorUtils.darkText, fontSize: 18),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isFarmer ? ColorUtils.forestGreen : Colors.blue,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              role,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            contact,
+                            style: AppTypography.bodySmall(color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (isFarmer) _buildVerificationStatusChip(verificationStatus),
+            ],
+          ),
 
-          // Name, Role, Handle, Flagged Reason
-          Expanded(
-            flex: 4,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Additional Farmer & Farm info
+          if (isFarmer) ...[
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      account.name,
-                      style: AppTypography.subtitle1(
+                      'Farm: $farmName',
+                      style: AppTypography.bodyMedium(
                         color: ColorUtils.darkText,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade700,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        account.role,
-                        style: AppTypography.caption(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 11,
-                        ),
-                      ),
+                    Text(
+                      'Address: $farmAddress',
+                      style: AppTypography.bodySmall(color: Colors.grey.shade600),
                     ),
                   ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  account.handle,
-                  style: AppTypography.bodySmall(
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  account.flaggedReason,
-                  style: AppTypography.bodySmall(
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Status & Report Count Column
-          Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _buildStatusBadge(account.status),
-                if (account.reportCount > 0) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    '${account.reportCount} ${account.reportCount == 1 ? 'report' : 'reports'}',
-                    style: AppTypography.caption(
-                      color: Colors.grey.shade500,
+                if (verificationStatus == 'pending' || verificationStatus == 'unverified')
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: ColorUtils.forestGreen,
+                      foregroundColor: ColorUtils.pureWhite,
                     ),
+                    icon: const Icon(LucideIcons.badgeCheck, size: 18),
+                    label: const Text('Approve & Publish Farm'),
+                    onPressed: () => _approveFarmer(userId, farmId),
                   ),
-                ],
               ],
             ),
-          ),
-
-          // Actions Column
-          Expanded(
-            flex: 3,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: _buildActionButtons(),
-            ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildStatusBadge(AccountStatus status) {
-    final (String label, Color bg) = switch (status) {
-      AccountStatus.flagged => ('Flagged', ColorUtils.terracotta),
-      AccountStatus.underReview => ('Under Review', const Color(0xFF2979FF)),
-      AccountStatus.cleared => ('Cleared', ColorUtils.forestGreen),
-    };
+  Widget _buildVerificationStatusChip(String status) {
+    Color bg = Colors.grey.shade200;
+    Color text = Colors.grey.shade800;
+    String label = 'Unverified';
+
+    if (status == 'pending') {
+      bg = Colors.orange.shade100;
+      text = Colors.orange.shade900;
+      label = 'Pending Review';
+    } else if (status == 'verified') {
+      bg = Colors.green.shade100;
+      text = Colors.green.shade900;
+      label = 'Verified & Published';
+    } else if (status == 'rejected') {
+      bg = Colors.red.shade100;
+      text = Colors.red.shade900;
+      label = 'Rejected';
+    }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         label,
-        style: AppTypography.caption(
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
+        style: TextStyle(color: text, fontSize: 12, fontWeight: FontWeight.bold),
       ),
     );
-  }
-
-  Widget _buildActionButtons() {
-    switch (account.status) {
-      case AccountStatus.flagged:
-        return Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          alignment: WrapAlignment.end,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            ElevatedButton(
-              onPressed: () {
-                // TODO: Investigate action
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2979FF),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 10,
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                'Investigate',
-                style: AppTypography.button(
-                  color: Colors.white,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                // TODO: Delete account action
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFD84040),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 10,
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                'Delete Account',
-                style: AppTypography.button(
-                  color: Colors.white,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        );
-      case AccountStatus.underReview:
-        return ElevatedButton(
-          onPressed: () {
-            // TODO: View case action
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2979FF),
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 10,
-            ),
-            elevation: 0,
-          ),
-          child: Text(
-            'View Case',
-            style: AppTypography.button(
-              color: Colors.white,
-              fontSize: 12,
-            ),
-          ),
-        );
-      case AccountStatus.cleared:
-        return Text(
-          'No action needed',
-          style: AppTypography.bodySmall(
-            color: Colors.grey.shade500,
-          ).copyWith(fontStyle: FontStyle.italic),
-        );
-    }
   }
 }

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -11,8 +9,8 @@ import 'onboarding_state.dart';
 /// Manages the 2-step farmer onboarding wizard:
 ///
 /// 1. **Step 1 — Farm Profile**: validates required fields (name, address,
-///    produce types), optionally uploads a farm photo, updates the `farms`
-///    table, and transitions to Step 2.
+///    produce types), accepts coordinates from map picker, optionally uploads
+///    a farm photo, updates the `farms` table, and transitions to Step 2.
 /// 2. **Step 2 — Verification**: optionally uploads a verification document;
 ///    the farmer may skip. On submit or skip, sets
 ///    `profiles.onboarding_completed = true` and emits [OnboardingCompleted].
@@ -32,6 +30,7 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
     on<Step1Next>(_onStep1Next);
     on<Step1NameChanged>(_onStep1NameChanged);
     on<Step1AddressChanged>(_onStep1AddressChanged);
+    on<Step1CoordinatesChanged>(_onStep1CoordinatesChanged);
     on<Step1ProduceTypesChanged>(_onStep1ProduceTypesChanged);
     on<Step1DescriptionChanged>(_onStep1DescriptionChanged);
     on<Step1FarmPhotoSelected>(_onStep1FarmPhotoSelected);
@@ -56,6 +55,21 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
       emit((state as Step1FarmProfile).copyWith(address: event.address));
     } else {
       emit(Step1FarmProfile(address: event.address));
+    }
+  }
+
+  void _onStep1CoordinatesChanged(
+      Step1CoordinatesChanged event, Emitter<OnboardingState> emit) {
+    if (state is Step1FarmProfile) {
+      emit((state as Step1FarmProfile).copyWith(
+        latitude: event.latitude,
+        longitude: event.longitude,
+      ));
+    } else {
+      emit(Step1FarmProfile(
+        latitude: event.latitude,
+        longitude: event.longitude,
+      ));
     }
   }
 
@@ -127,8 +141,12 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
         );
       }
 
-      await _farmService.updateFarm(
-        _ownerId,
+      // Farm is created here during onboarding (no longer in registration)
+      await _farmService.createFarm(
+        ownerId: _ownerId,
+        farmName: current.name,
+        address: current.address,
+        produceTypes: current.produceTypes,
         description: current.description.isNotEmpty ? current.description : null,
         photoUrl: photoUrl,
       );

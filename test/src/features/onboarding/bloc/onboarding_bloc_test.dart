@@ -80,10 +80,14 @@ void main() {
         .thenAnswer((_) => _ControlledFilter());
 
     // Default stubs — individual tests override if needed
-    when(() => farmService.updateFarm(any(),
-            description: any(named: 'description'),
-            photoUrl: any(named: 'photoUrl')))
-        .thenAnswer((_) async {});
+    when(() => farmService.createFarm(
+          ownerId: any(named: 'ownerId'),
+          farmName: any(named: 'farmName'),
+          address: any(named: 'address'),
+          produceTypes: any(named: 'produceTypes'),
+          description: any(named: 'description'),
+          photoUrl: any(named: 'photoUrl'),
+        )).thenAnswer((_) async {});
     when(() => farmService.uploadFarmPhoto(any(), any()))
         .thenAnswer((_) async => 'https://example.com/photo.jpg');
     when(() => farmService.submitVerification(any(), any(), any()))
@@ -145,8 +149,11 @@ void main() {
 
       verify(() => farmService.uploadFarmPhoto(any(), any())).called(1);
       verify(
-        () => farmService.updateFarm(
-          any(),
+        () => farmService.createFarm(
+          ownerId: any(named: 'ownerId'),
+          farmName: any(named: 'farmName'),
+          address: any(named: 'address'),
+          produceTypes: any(named: 'produceTypes'),
           description: any(named: 'description'),
           photoUrl: any(named: 'photoUrl'),
         ),

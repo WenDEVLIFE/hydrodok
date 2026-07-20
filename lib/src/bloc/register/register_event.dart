@@ -41,24 +41,6 @@ final class RegisterRoleChanged extends RegisterEvent {
   const RegisterRoleChanged(this.role);
 }
 
-/// Emitted when the user changes their farm name (farmers only).
-final class RegisterFarmNameChanged extends RegisterEvent {
-  final String farmName;
-  const RegisterFarmNameChanged(this.farmName);
-}
-
-/// Emitted when the user changes their farm location.
-final class RegisterFarmLocationChanged extends RegisterEvent {
-  final String farmLocation;
-  const RegisterFarmLocationChanged(this.farmLocation);
-}
-
-/// Emitted when the user changes their primary produce type.
-final class RegisterProduceTypeChanged extends RegisterEvent {
-  final String produceType;
-  const RegisterProduceTypeChanged(this.produceType);
-}
-
 /// Emitted when the user taps the "Register" / "Create Account" button.
 final class RegisterSubmitted extends RegisterEvent {
   const RegisterSubmitted();

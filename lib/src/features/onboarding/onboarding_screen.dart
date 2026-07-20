@@ -14,10 +14,11 @@ import '../farmer/farmer_dashboard_screen.dart';
 import 'bloc/onboarding_bloc.dart';
 import 'bloc/onboarding_event.dart';
 import 'bloc/onboarding_state.dart';
+import 'farm_map_picker_dialog.dart';
 
 /// 2-Step Post-Registration Wizard for Farmers:
 ///
-/// **Step 1**: Farm profile details (Name, Address, Produce types chips, Description, Farm Photo).
+/// **Step 1**: Farm profile details (Name, Address, Interactive Map location picker, Produce types chips, Description, Farm Photo).
 /// **Step 2**: Optional verification document upload (DTI/SEC, Barangay clearance, Geotagged photo) or skip.
 class OnboardingScreen extends StatelessWidget {
   final String ownerId;
@@ -90,6 +91,29 @@ class _OnboardingViewState extends State<_OnboardingView> {
         builder: (_) => const FarmerDashboardScreen(),
       ),
     );
+  }
+
+  Future<void> _openMapPicker(BuildContext context) async {
+    final result = await Navigator.of(context).push<MapLocationResult>(
+      MaterialPageRoute(
+        builder: (_) => const FarmMapPickerDialog(),
+        fullscreenDialog: true,
+      ),
+    );
+
+    if (result != null && context.mounted) {
+      final bloc = context.read<OnboardingBloc>();
+      _addressController.text = result.address;
+      bloc.add(Step1AddressChanged(result.address));
+      bloc.add(Step1CoordinatesChanged(result.latLng.latitude, result.latLng.longitude));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Farm coordinates set: ${result.latLng.latitude.toStringAsFixed(4)}, ${result.latLng.longitude.toStringAsFixed(4)}'),
+          backgroundColor: ColorUtils.forestGreen,
+        ),
+      );
+    }
   }
 
   Future<void> _pickFarmPhoto(BuildContext context) async {
@@ -257,13 +281,34 @@ class _OnboardingViewState extends State<_OnboardingView> {
         ),
         const SizedBox(height: 16),
 
-        // Farm Address
+        // Farm Address & Interactive Map Picker Button
         CustomTextField(
           controller: _addressController,
           label: 'Farm Location / Address',
           hint: 'e.g. General Trias, Cavite',
           prefixIcon: const Icon(Icons.location_on_rounded, color: Colors.white70),
           onChanged: (val) => bloc.add(Step1AddressChanged(val)),
+        ),
+        const SizedBox(height: 8),
+
+        // Select Location on Interactive Map CTA
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: ColorUtils.sageGreen.withOpacity(0.5)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+          icon: const Icon(LucideIcons.mapPin, color: ColorUtils.sageGreen, size: 20),
+          label: Text(
+            state.latitude != null
+                ? 'Location Pinned: ${state.latitude!.toStringAsFixed(4)}, ${state.longitude!.toStringAsFixed(4)}'
+                : 'Select Exact Location on Interactive Map',
+            style: AppTypography.bodyMedium(
+              color: ColorUtils.sageGreen,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          onPressed: () => _openMapPicker(context),
         ),
         const SizedBox(height: 20),
 

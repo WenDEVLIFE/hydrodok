@@ -58,3 +58,13 @@ alter table public.farms
   add column if not exists verification_status text default 'unverified',
   add column if not exists verification_doc_url text,
   add column if not exists updated_at timestamptz default now();
+
+-- ─────────────────────────────────────────────────────────────────────────────
+--  4. INSERT policy for farms (needed for onboarding Step 1 where the
+--     farm is created directly from the client, not via the old RPC function)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+drop policy if exists "Farmers can create their own farm" on public.farms;
+create policy "Farmers can create their own farm"
+  on public.farms for insert
+  with check (auth.uid() = owner_id);

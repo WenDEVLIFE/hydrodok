@@ -126,20 +126,6 @@ void main() {
       );
     });
 
-    test('rejects empty farm fields for farmer', () async {
-      bloc.add(const RegisterNameChanged('Juan'));
-      bloc.add(const RegisterEmailChanged('juan@example.com'));
-      bloc.add(const RegisterContactNumberChanged('09171234567'));
-      bloc.add(const RegisterPasswordChanged('password123'));
-      bloc.add(const RegisterConfirmPasswordChanged('password123'));
-      // Role is farmer by default, farm fields empty
-      bloc.add(const RegisterSubmitted());
-
-      await expectLater(
-        bloc.stream,
-        emits(isA<RegisterFailure>()),
-      );
-    });
   });
 
   // ── Uniqueness checks ─────────────────────────────────────────────────
@@ -151,9 +137,6 @@ void main() {
       bloc.add(const RegisterContactNumberChanged('09171234567'));
       bloc.add(const RegisterPasswordChanged('password123'));
       bloc.add(const RegisterConfirmPasswordChanged('password123'));
-      bloc.add(const RegisterFarmNameChanged('Green Valley Farm'));
-      bloc.add(const RegisterFarmLocationChanged('General Trias'));
-      bloc.add(const RegisterProduceTypeChanged('Lettuce'));
     });
 
     test('rejects duplicate email', () async {
@@ -198,9 +181,6 @@ void main() {
       bloc.add(const RegisterContactNumberChanged('09171234567'));
       bloc.add(const RegisterPasswordChanged('password123'));
       bloc.add(const RegisterConfirmPasswordChanged('password123'));
-      bloc.add(const RegisterFarmNameChanged('Green Valley Farm'));
-      bloc.add(const RegisterFarmLocationChanged('General Trias'));
-      bloc.add(const RegisterProduceTypeChanged('Lettuce'));
     });
 
     test('emits RegisterOtpSent with SignUpData on success', () async {
@@ -213,14 +193,12 @@ void main() {
       expect(otpSent.data.email, 'juan@example.com');
       expect(otpSent.data.name, 'Juan Dela Cruz');
       expect(otpSent.data.role, UserRole.farmer);
-      expect(otpSent.data.farm, isNotNull);
-      expect(otpSent.data.farm!.farmName, 'Green Valley Farm');
 
       verify(() => authRepository.generateAndSendOtp('juan@example.com'))
           .called(1);
     });
 
-    test('consumer signup omits farm details', () async {
+    test('consumer signup succeeds without farm details', () async {
       bloc.add(const RegisterRoleChanged(UserRole.consumer));
       bloc.add(const RegisterNameChanged('Maria Santos'));
       bloc.add(const RegisterEmailChanged('maria@example.com'));
@@ -235,7 +213,6 @@ void main() {
       expect(emitted, isA<RegisterOtpSent>());
       final otpSent = emitted as RegisterOtpSent;
       expect(otpSent.data.role, UserRole.consumer);
-      expect(otpSent.data.farm, isNull);
     });
   });
 
@@ -247,9 +224,6 @@ void main() {
     bloc.add(const RegisterContactNumberChanged('09171234567'));
     bloc.add(const RegisterPasswordChanged('password123'));
     bloc.add(const RegisterConfirmPasswordChanged('password123'));
-
-    // Switch to consumer to avoid farm field validation
-    bloc.add(const RegisterRoleChanged(UserRole.consumer));
 
     when(() => authRepository.generateAndSendOtp(any()))
         .thenThrow(Exception('Network error'));

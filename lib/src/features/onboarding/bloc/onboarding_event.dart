@@ -23,6 +23,12 @@ final class Step1AddressChanged extends OnboardingEvent {
   const Step1AddressChanged(this.address);
 }
 
+final class Step1CoordinatesChanged extends OnboardingEvent {
+  final double latitude;
+  final double longitude;
+  const Step1CoordinatesChanged(this.latitude, this.longitude);
+}
+
 final class Step1ProduceTypesChanged extends OnboardingEvent {
   final List<String> produceTypes;
   const Step1ProduceTypesChanged(this.produceTypes);

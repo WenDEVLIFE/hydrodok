@@ -14,6 +14,8 @@ final class OnboardingInitial extends OnboardingState {
 final class Step1FarmProfile extends OnboardingState {
   final String name;
   final String address;
+  final double? latitude;
+  final double? longitude;
   final List<String> produceTypes;
   final String description;
   final File? farmPhotoFile;
@@ -23,6 +25,8 @@ final class Step1FarmProfile extends OnboardingState {
   const Step1FarmProfile({
     this.name = '',
     this.address = '',
+    this.latitude,
+    this.longitude,
     this.produceTypes = const [],
     this.description = '',
     this.farmPhotoFile,
@@ -33,6 +37,8 @@ final class Step1FarmProfile extends OnboardingState {
   Step1FarmProfile copyWith({
     String? name,
     String? address,
+    double? latitude,
+    double? longitude,
     List<String>? produceTypes,
     String? description,
     File? farmPhotoFile,
@@ -44,6 +50,8 @@ final class Step1FarmProfile extends OnboardingState {
     return Step1FarmProfile(
       name: name ?? this.name,
       address: address ?? this.address,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
       produceTypes: produceTypes ?? this.produceTypes,
       description: description ?? this.description,
       farmPhotoFile: clearPhoto ? null : (farmPhotoFile ?? this.farmPhotoFile),

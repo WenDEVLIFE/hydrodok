@@ -44,9 +44,6 @@ class _RegisterFormState extends State<_RegisterForm> {
   final _contactController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _farmNameController = TextEditingController();
-  final _farmLocationController = TextEditingController();
-  final _produceTypeController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
@@ -59,9 +56,6 @@ class _RegisterFormState extends State<_RegisterForm> {
     _contactController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _farmNameController.dispose();
-    _farmLocationController.dispose();
-    _produceTypeController.dispose();
     super.dispose();
   }
 
@@ -223,47 +217,6 @@ class _RegisterFormState extends State<_RegisterForm> {
                           .read<RegisterBloc>()
                           .add(RegisterConfirmPasswordChanged(value)),
                     ),
-
-                    // ═══════════════════════════════════════════════
-                    //  FARMER‑SPECIFIC FIELDS
-                    // ═══════════════════════════════════════════════
-                    if (_selectedRole == UserRole.farmer) ...[
-                      const SizedBox(height: 24),
-                      _SectionHeader('Farm Details'),
-                      const SizedBox(height: 16),
-
-                      CustomTextField(
-                        label: 'Farm / Business Name',
-                        hint: 'e.g. Green Valley Farm',
-                        controller: _farmNameController,
-                        prefixIcon: const Icon(Icons.store_outlined),
-                        onChanged: (value) => context
-                            .read<RegisterBloc>()
-                            .add(RegisterFarmNameChanged(value)),
-                      ),
-                      const SizedBox(height: 16),
-
-                      CustomTextField(
-                        label: 'Farm Location',
-                        hint: 'e.g. Brgy. San Jose, General Trias',
-                        controller: _farmLocationController,
-                        prefixIcon: const Icon(Icons.location_on_outlined),
-                        onChanged: (value) => context
-                            .read<RegisterBloc>()
-                            .add(RegisterFarmLocationChanged(value)),
-                      ),
-                      const SizedBox(height: 16),
-
-                      CustomTextField(
-                        label: 'Primary Produce Type',
-                        hint: 'e.g. Lettuce, Tomatoes, Pechay',
-                        controller: _produceTypeController,
-                        prefixIcon: const Icon(Icons.eco_outlined),
-                        onChanged: (value) => context
-                            .read<RegisterBloc>()
-                            .add(RegisterProduceTypeChanged(value)),
-                      ),
-                    ],
 
                     const SizedBox(height: 20),
 

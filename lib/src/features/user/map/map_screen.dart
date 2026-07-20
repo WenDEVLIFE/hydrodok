@@ -7,11 +7,14 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../core/models/farm.dart';
+import '../../../core/service/farm_service.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/typography.dart';
 
-/// Mock farms — replace with real Supabase data later.
+/// Mock farms — fallback when live database has no verified farms.
 final _mockFarms = <Farm>[
   const Farm(
     id: '1',
@@ -61,11 +64,49 @@ class _MapScreenState extends State<MapScreen> {
 
   Farm? _selectedFarm;
   LatLng? _userLocation;
+  List<Farm> _farmsList = _mockFarms;
 
   @override
   void initState() {
     super.initState();
     _determinePosition();
+    _loadVerifiedFarms();
+  }
+
+  Future<void> _loadVerifiedFarms() async {
+    try {
+      final farmService = FarmService(supabase: Supabase.instance.client);
+      final rawList = await farmService.getVerifiedFarms();
+      if (rawList.isNotEmpty && mounted) {
+        final List<Farm> liveFarms = rawList.map((data) {
+          final lat = (data['latitude'] as num?)?.toDouble() ?? 14.5995;
+          final lng = (data['longitude'] as num?)?.toDouble() ?? 120.9842;
+          final name = data['farm_name'] as String? ?? 'Verified Hydro Farm';
+          final produceList = data['produce_types'] as List<dynamic>?;
+          final produce = (produceList != null && produceList.isNotEmpty)
+              ? produceList.first.toString()
+              : 'Hydroponics';
+
+          return Farm(
+            id: data['id'] as String? ?? UniqueKey().toString(),
+            name: name,
+            product: produce,
+            rating: 4.9,
+            reviewCount: 24,
+            unitsInStock: 5000,
+            pricePerKg: 120,
+            latitude: lat,
+            longitude: lng,
+          );
+        }).toList();
+
+        setState(() {
+          _farmsList = liveFarms;
+        });
+      }
+    } catch (_) {
+      // Keep fallback mock list if offline or table not populated
+    }
   }
 
   Future<void> _determinePosition() async {
@@ -236,7 +277,7 @@ class _MapScreenState extends State<MapScreen> {
     final markers = <Marker>[];
 
     // Farm markers
-    for (final farm in _mockFarms) {
+    for (final farm in _farmsList) {
       final isSelected = _selectedFarm?.id == farm.id;
       markers.add(
         Marker(

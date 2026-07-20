@@ -211,11 +211,27 @@ class SupabaseAuthRepository implements AuthRepository {
     final user = _supabase.auth.currentUser;
     if (user == null) return null;
 
-    final result = await _supabase
-        .from('profiles')
-        .select('full_name, contact_number, role, avatar_url, onboarding_completed')
-        .eq('id', user.id)
-        .maybeSingle();
+    // Query profiles — may fail if onboarding_completed column doesn't exist yet.
+    // Fall back to querying without it.
+    Map<String, dynamic>? result;
+    try {
+      result = await _supabase
+          .from('profiles')
+          .select('full_name, contact_number, role, avatar_url, onboarding_completed')
+          .eq('id', user.id)
+          .maybeSingle();
+    } catch (_) {
+      // Column might not exist yet — retry without it.
+      try {
+        result = await _supabase
+            .from('profiles')
+            .select('full_name, contact_number, role, avatar_url')
+            .eq('id', user.id)
+            .maybeSingle();
+      } catch (_) {
+        return null;
+      }
+    }
 
     if (result == null) return null;
 

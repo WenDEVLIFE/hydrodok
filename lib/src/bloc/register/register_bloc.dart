@@ -23,9 +23,6 @@ final class RegisterBloc extends Bloc<RegisterEvent, RegisterState> {
     on<RegisterPasswordChanged>(_onPasswordChanged);
     on<RegisterConfirmPasswordChanged>(_onConfirmPasswordChanged);
     on<RegisterRoleChanged>(_onRoleChanged);
-    on<RegisterFarmNameChanged>(_onFarmNameChanged);
-    on<RegisterFarmLocationChanged>(_onFarmLocationChanged);
-    on<RegisterProduceTypeChanged>(_onProduceTypeChanged);
     on<RegisterSubmitted>(_onSubmitted);
   }
 
@@ -35,9 +32,6 @@ final class RegisterBloc extends Bloc<RegisterEvent, RegisterState> {
   String _password = '';
   String _confirmPassword = '';
   UserRole _role = UserRole.farmer;
-  String _farmName = '';
-  String _farmLocation = '';
-  String _produceType = '';
 
   void _onNameChanged(RegisterNameChanged event, Emitter<RegisterState> emit) {
     _name = event.name;
@@ -70,30 +64,6 @@ final class RegisterBloc extends Bloc<RegisterEvent, RegisterState> {
 
   void _onRoleChanged(RegisterRoleChanged event, Emitter<RegisterState> emit) {
     _role = event.role;
-    // Clear farmer fields when switching to consumer
-    if (_role == UserRole.consumer) {
-      _farmName = '';
-      _farmLocation = '';
-      _produceType = '';
-    }
-    if (state is RegisterFailure) emit(const RegisterInitial());
-  }
-
-  void _onFarmNameChanged(
-      RegisterFarmNameChanged event, Emitter<RegisterState> emit) {
-    _farmName = event.farmName;
-    if (state is RegisterFailure) emit(const RegisterInitial());
-  }
-
-  void _onFarmLocationChanged(
-      RegisterFarmLocationChanged event, Emitter<RegisterState> emit) {
-    _farmLocation = event.farmLocation;
-    if (state is RegisterFailure) emit(const RegisterInitial());
-  }
-
-  void _onProduceTypeChanged(
-      RegisterProduceTypeChanged event, Emitter<RegisterState> emit) {
-    _produceType = event.produceType;
     if (state is RegisterFailure) emit(const RegisterInitial());
   }
 
@@ -135,20 +105,6 @@ final class RegisterBloc extends Bloc<RegisterEvent, RegisterState> {
       return emit(const RegisterFailure('Passwords do not match'));
     }
 
-    // ── Farmer-specific validation ──────────────────────────────────
-    if (_role == UserRole.farmer) {
-      if (_farmName.trim().isEmpty) {
-        return emit(const RegisterFailure('Please enter your farm name'));
-      }
-      if (_farmLocation.trim().isEmpty) {
-        return emit(const RegisterFailure('Please enter your farm location'));
-      }
-      if (_produceType.trim().isEmpty) {
-        return emit(
-            const RegisterFailure('Please enter your primary produce type'));
-      }
-    }
-
     // ── Uniqueness checks ──────────────────────────────────────────
     emit(const RegisterLoading());
 
@@ -166,21 +122,12 @@ final class RegisterBloc extends Bloc<RegisterEvent, RegisterState> {
       }
 
       // ── Build sign-up data & send OTP ──────────────────────────────
-      final farm = _role == UserRole.farmer
-          ? FarmDetails(
-              farmName: _farmName.trim(),
-              location: _farmLocation.trim(),
-              produceType: _produceType.trim(),
-            )
-          : null;
-
       final data = SignUpData(
         name: name,
         email: email,
         contactNumber: contactNumber,
         password: password,
         role: _role,
-        farm: farm,
       );
 
       await _authRepository.generateAndSendOtp(email);
