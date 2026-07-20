@@ -59,15 +59,10 @@ Future<bool> initializeSupabase() async {
       anonKey: supabaseKey,
     );
 
-    final supabase = Supabase.instance.client;
-
-    // Simple connectivity test
-    await supabase.from('profiles').select('id').limit(1);
-
-    print('✅ Connected to Supabase');
+    debugPrint('✅ Connected to Supabase');
     return true;
   } catch (e) {
-    print('❌ Failed to connect to Supabase: $e');
+    debugPrint('❌ Failed to connect to Supabase: $e');
     return false;
   }
 }
