@@ -36,11 +36,27 @@ void main() async {
 
 Future<bool> initializeSupabase() async {
   try {
-    await dotenv.load();
+    try {
+      await dotenv.load(fileName: ".env");
+    } catch (_) {
+      // Optional: .env file is not present in CI / Vercel build environment
+    }
+
+    final supabaseUrl = dotenv.env['SUPABASE_URL'] ??
+        const String.fromEnvironment(
+          'SUPABASE_URL',
+          defaultValue: 'https://jhmzjebwyiknvltcljck.supabase.co',
+        );
+    final supabaseKey = dotenv.env['SUPABASE_ANON_KEY'] ??
+        const String.fromEnvironment(
+          'SUPABASE_ANON_KEY',
+          defaultValue:
+              'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpobXpqZWJ3eWlrbnZsdGNsamNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNzUzNTgsImV4cCI6MjA5OTk1MTM1OH0.qQBGMC6ancDlk1EOTedya6lkVCSxShILTZZUy8qBQFw',
+        );
 
     await Supabase.initialize(
-      url: dotenv.env['SUPABASE_URL']!,
-      publishableKey: dotenv.env['SUPABASE_ANON_KEY']!,
+      url: supabaseUrl,
+      anonKey: supabaseKey,
     );
 
     final supabase = Supabase.instance.client;
@@ -51,8 +67,7 @@ Future<bool> initializeSupabase() async {
     print('✅ Connected to Supabase');
     return true;
   } catch (e) {
-    print('❌ Failed to connect to Supabase');
-    print(e);
+    print('❌ Failed to connect to Supabase: $e');
     return false;
   }
 }
