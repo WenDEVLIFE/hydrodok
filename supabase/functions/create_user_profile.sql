@@ -3,6 +3,13 @@
 --  Run this script in your Supabase SQL Editor.
 -- =============================================================================
 
+-- Ensure required columns exist on tables
+alter table public.farms
+  add column if not exists rejection_reason text;
+
+alter table public.profiles
+  add column if not exists onboarding_completed boolean default false;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 --  1. Helper function: is_admin()
 --     Checks if the current authenticated user has role = 'admin' in profiles.

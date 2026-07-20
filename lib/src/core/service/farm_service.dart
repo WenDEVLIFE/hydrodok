@@ -155,7 +155,6 @@ class FarmService {
   Future<void> approveFarmVerification(String farmId) async {
     final response = await _supabase.from('farms').update({
       'verification_status': 'verified',
-      'rejection_reason': null,
       'updated_at': DateTime.now().toIso8601String(),
     }).eq('id', farmId).select('owner_id').maybeSingle();
 
@@ -177,16 +176,33 @@ class FarmService {
 
   /// Rejects a farm's verification request (`verification_status = 'rejected'`).
   Future<void> rejectFarmVerification(String farmId, {String? reason}) async {
-    final farmResponse = await _supabase
-        .from('farms')
-        .update({
-          'verification_status': 'rejected',
-          'rejection_reason': reason ?? 'Verification documents did not meet requirements.',
-          'updated_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', farmId)
-        .select('owner_id, farm_name')
-        .maybeSingle();
+    final updates = <String, dynamic>{
+      'verification_status': 'rejected',
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (reason != null && reason.isNotEmpty) {
+      updates['rejection_reason'] = reason;
+    }
+
+    Map<String, dynamic>? farmResponse;
+    try {
+      farmResponse = await _supabase
+          .from('farms')
+          .update(updates)
+          .eq('id', farmId)
+          .select('owner_id, farm_name')
+          .maybeSingle();
+    } catch (_) {
+      farmResponse = await _supabase
+          .from('farms')
+          .update({
+            'verification_status': 'rejected',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', farmId)
+          .select('owner_id, farm_name')
+          .maybeSingle();
+    }
 
     if (farmResponse != null) {
       final ownerId = farmResponse['owner_id'] as String?;
