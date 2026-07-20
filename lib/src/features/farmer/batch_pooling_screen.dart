@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/service/batch_pooling_service.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
 
@@ -14,42 +14,27 @@ class BatchPoolingScreen extends StatefulWidget {
 }
 
 class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
-  // Sample active batch pools
-  final List<Map<String, dynamic>> _batchPools = [
-    {
-      'id': 'pool-1',
-      'title': 'Collective Hydroponic Butterhead Lettuce Pool',
-      'crop': 'Butterhead Lettuce',
-      'target_weight': 500.0,
-      'current_weight': 340.0,
-      'target_price': 160.0,
-      'participants': 6,
-      'cutoff_days': 4,
-      'status': 'active',
-    },
-    {
-      'id': 'pool-2',
-      'title': 'Bulk Hydroponic Cherry Tomatoes Pool',
-      'crop': 'Cherry Tomatoes',
-      'target_weight': 300.0,
-      'current_weight': 280.0,
-      'target_price': 220.0,
-      'participants': 4,
-      'cutoff_days': 2,
-      'status': 'active',
-    },
-    {
-      'id': 'pool-3',
-      'title': 'Batch Romaine Lettuce Order for Supermarket Chain',
-      'crop': 'Romaine Lettuce',
-      'target_weight': 1000.0,
-      'current_weight': 1000.0,
-      'target_price': 150.0,
-      'participants': 12,
-      'cutoff_days': 0,
-      'status': 'filled',
-    },
-  ];
+  late final BatchPoolingService _poolingService;
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _batchPools = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _poolingService = BatchPoolingService();
+    _loadPools();
+  }
+
+  Future<void> _loadPools() async {
+    setState(() => _isLoading = true);
+    final pools = await _poolingService.getBatchPools();
+    if (mounted) {
+      setState(() {
+        _batchPools = pools;
+        _isLoading = false;
+      });
+    }
+  }
 
   void _showCreatePoolDialog() {
     final cropController = TextEditingController();
@@ -140,33 +125,36 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () {
+                  onPressed: () async {
                     final crop = cropController.text.trim();
                     final weight = double.tryParse(weightController.text) ?? 0;
                     final price = double.tryParse(priceController.text) ?? 0;
                     if (crop.isEmpty || weight <= 0) return;
 
-                    setState(() {
-                      _batchPools.insert(0, {
-                        'id': 'pool-${DateTime.now().millisecondsSinceEpoch}',
-                        'title': 'Collective $crop Batch Pool',
-                        'crop': crop,
-                        'target_weight': weight,
-                        'current_weight': 0.0,
-                        'target_price': price,
-                        'participants': 1,
-                        'cutoff_days': 7,
-                        'status': 'active',
-                      });
-                    });
-
-                    Navigator.of(ctx).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Batch pooling campaign published!'),
-                        backgroundColor: ColorUtils.forestGreen,
-                      ),
-                    );
+                    try {
+                      await _poolingService.createBatchPool(
+                        title: 'Collective $crop Batch Pool',
+                        cropName: crop,
+                        targetQuantity: weight,
+                        targetPrice: price,
+                      );
+                      if (ctx.mounted) Navigator.of(ctx).pop();
+                      _loadPools();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Batch pooling campaign published!'),
+                            backgroundColor: ColorUtils.forestGreen,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to publish pool: $e')),
+                        );
+                      }
+                    }
                   },
                   child: const Text('Publish Batch Pool', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
@@ -219,27 +207,40 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: ColorUtils.forestGreen),
-            onPressed: () {
+            onPressed: () async {
               final added = double.tryParse(qtyController.text.trim()) ?? 0;
               if (added <= 0) return;
 
-              setState(() {
-                final current = (pool['current_weight'] as num).toDouble();
-                final target = (pool['target_weight'] as num).toDouble();
-                pool['current_weight'] = (current + added).clamp(0.0, target);
-                pool['participants'] = (pool['participants'] as int) + 1;
-                if (pool['current_weight'] >= target) {
-                  pool['status'] = 'filled';
-                }
-              });
+              final poolId = pool['id'] as String;
+              final currentW = (pool['current_quantity'] as num?)?.toDouble() ??
+                  (pool['current_weight'] as num?)?.toDouble() ?? 0;
+              final targetW = (pool['target_quantity'] as num?)?.toDouble() ??
+                  (pool['target_weight'] as num?)?.toDouble() ?? 100;
 
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Pledge recorded! Thanks for pooling.'),
-                  backgroundColor: ColorUtils.forestGreen,
-                ),
-              );
+              try {
+                await _poolingService.contributeToPool(
+                  batchId: poolId,
+                  quantity: added,
+                  currentQuantity: currentW,
+                  targetQuantity: targetW,
+                );
+                if (ctx.mounted) Navigator.of(ctx).pop();
+                _loadPools();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Pledge recorded! Thanks for pooling.'),
+                      backgroundColor: ColorUtils.forestGreen,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to pledge produce: $e')),
+                  );
+                }
+              }
             },
             child: const Text('Confirm Pledge', style: TextStyle(color: Colors.white)),
           ),
@@ -312,16 +313,25 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
             Text('Active Batch Pooling Campaigns', style: AppTypography.heading3(color: ColorUtils.darkText)),
             const SizedBox(height: 12),
 
-            ..._batchPools.map((pool) {
-              final title = pool['title'] as String;
-              final crop = pool['crop'] as String;
-              final targetW = (pool['target_weight'] as num).toDouble();
-              final currentW = (pool['current_weight'] as num).toDouble();
-              final price = (pool['target_price'] as num).toDouble();
-              final participants = pool['participants'] as int;
-              final cutoff = pool['cutoff_days'] as int;
-              final isFilled = pool['status'] == 'filled' || currentW >= targetW;
-              final progress = (currentW / targetW).clamp(0.0, 1.0);
+            if (_isLoading)
+              const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+            else if (_batchPools.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text('No active batch pooling campaigns yet. Tap "+ Create Pool" to start one!', style: AppTypography.bodySmall(color: Colors.grey.shade600)),
+              )
+            else
+              ..._batchPools.map((pool) {
+                final title = pool['title'] as String? ?? 'Collective Batch Pool';
+                final crop = pool['crop_name'] as String? ?? pool['crop'] as String? ?? 'Produce';
+                final targetW = (pool['target_quantity'] as num?)?.toDouble() ?? (pool['target_weight'] as num?)?.toDouble() ?? 100.0;
+                final currentW = (pool['current_quantity'] as num?)?.toDouble() ?? (pool['current_weight'] as num?)?.toDouble() ?? 0.0;
+                final price = (pool['target_price'] as num?)?.toDouble() ?? 0.0;
+                final members = pool['batch_members'] as List<dynamic>? ?? [];
+                final participants = members.isNotEmpty ? members.length : ((pool['participants'] as int?) ?? 1);
+                final statusStr = (pool['status'] as String? ?? 'Open').toLowerCase();
+                final isFilled = statusStr == 'filled' || currentW >= targetW;
+                final progress = targetW > 0 ? (currentW / targetW).clamp(0.0, 1.0) : 0.0;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 16),
@@ -365,9 +375,9 @@ class _BatchPoolingScreenState extends State<BatchPoolingScreen> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            isFilled ? 'GOAL MET' : '$cutoff days left',
+                            isFilled ? 'GOAL MET' : (statusStr == 'open' ? 'ACTIVE' : statusStr.toUpperCase()),
                             style: TextStyle(
-                              color: isFilled ? ColorUtils.sageGreen : Colors.orange.shade800,
+                              color: isFilled ? ColorUtils.forestGreen : Colors.orange.shade800,
                               fontWeight: FontWeight.bold,
                               fontSize: 11,
                             ),
