@@ -197,6 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 12),
 
                       // ── DEV: Skip to App ──────────────────────────────
+                      /*
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
@@ -250,6 +251,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
+                      */
                       const SizedBox(height: 16),
                     ],
                   ),
