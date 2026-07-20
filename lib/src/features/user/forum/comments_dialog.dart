@@ -114,8 +114,10 @@ class _CommentsDialogState extends State<CommentsDialog> {
                   Expanded(
                     child: TextField(
                       controller: _controller,
+                      style: const TextStyle(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w500),
                       decoration: InputDecoration(
                         hintText: 'Add a comment...',
+                        hintStyle: TextStyle(color: Colors.grey.shade500),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -148,10 +150,55 @@ class _CommentsDialogState extends State<CommentsDialog> {
   }
 
   Widget _buildCommentItem(Map<String, dynamic> comment) {
-    final profile = comment['profiles'] as Map<String, dynamic>?;
-    final name = profile?['full_name'] as String? ?? 'Unknown';
-    final content = comment['content'] as String? ?? '';
-    final createdAt = comment['created_at'] as String? ?? '';
+    return _CommentTile(comment: comment);
+  }
+}
+
+class _CommentTile extends StatefulWidget {
+  final Map<String, dynamic> comment;
+
+  const _CommentTile({required this.comment});
+
+  @override
+  State<_CommentTile> createState() => _CommentTileState();
+}
+
+class _CommentTileState extends State<_CommentTile> {
+  late final Future<String> _authorNameFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _authorNameFuture = _loadAuthorName();
+  }
+
+  Future<String> _loadAuthorName() async {
+    final embedded = widget.comment['profiles'];
+    if (embedded is Map<String, dynamic> && embedded['full_name'] != null) {
+      return embedded['full_name'] as String;
+    }
+
+    final authorId = (widget.comment['author_id'] ?? widget.comment['user_id']) as String?;
+    if (authorId == null || authorId.isEmpty) return 'Farmer';
+
+    try {
+      final res = await Supabase.instance.client
+          .from('profiles')
+          .select('full_name')
+          .eq('id', authorId)
+          .maybeSingle();
+      if (res != null && res['full_name'] != null && (res['full_name'] as String).isNotEmpty) {
+        return res['full_name'] as String;
+      }
+    } catch (_) {}
+
+    return 'Farmer';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final content = widget.comment['content'] as String? ?? '';
+    final createdAt = widget.comment['created_at'] as String? ?? '';
 
     String timeStr = '';
     if (createdAt.isNotEmpty) {
@@ -169,58 +216,65 @@ class _CommentsDialogState extends State<CommentsDialog> {
       } catch (_) {}
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return FutureBuilder<String>(
+      future: _authorNameFuture,
+      builder: (context, snapshot) {
+        final name = snapshot.data ?? 'Farmer';
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: ColorUtils.forestGreen,
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : '?',
-                  style: AppTypography.caption(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: AppTypography.bodySmall(
-                        color: ColorUtils.darkText,
-                        fontWeight: FontWeight.w600,
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: ColorUtils.forestGreen,
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : 'F',
+                      style: AppTypography.caption(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    Text(
-                      timeStr,
-                      style: AppTypography.caption(color: Colors.grey.shade500),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: AppTypography.bodySmall(
+                            color: ColorUtils.darkText,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (timeStr.isNotEmpty)
+                          Text(
+                            timeStr,
+                            style: AppTypography.caption(color: Colors.grey.shade500),
+                          ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                content,
+                style: const TextStyle(color: Colors.black, fontSize: 14),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            content,
-            style: AppTypography.bodyMedium(color: ColorUtils.darkText),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
