@@ -12,13 +12,14 @@ import '../../widget/custom_text_field.dart';
 import '../../widget/logo_widget.dart';
 import '../admin/admin_shell.dart';
 import '../main_shell.dart';
+import '../onboarding/onboarding_gate.dart';
 import '../register/register_screen.dart';
 
 /// Full‑screen login form with email / password fields, client‑side
 /// validation, and a loading / error lifecycle driven by [LoginBloc].
 ///
-/// On successful login it routes to the correct shell based on the user's
-/// role (admin → [AdminShell], farmer/consumer → [MainShell]).
+/// On successful login it routes via [OnboardingGate] based on the user's
+/// role and onboarding state.
 class LoginScreen extends StatefulWidget {
   /// Provided by the parent to avoid context.read lookup inside BlocProvider.
   final AuthRepository authRepository;
@@ -39,11 +40,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _onLoginSuccess(UserSession session) {
     if (!mounted) return;
-    final destination = session.role == 'admin'
-        ? const AdminShell()
-        : const MainShell();
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => destination),
+      MaterialPageRoute(builder: (_) => OnboardingGate(session: session)),
     );
   }
 

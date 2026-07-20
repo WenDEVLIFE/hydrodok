@@ -220,7 +220,7 @@ class SupabaseAuthRepository implements AuthRepository {
 
     final result = await _supabase
         .from('profiles')
-        .select('full_name, contact_number, role, avatar_url')
+        .select('full_name, contact_number, role, avatar_url, onboarding_completed')
         .eq('id', user.id)
         .maybeSingle();
 
@@ -258,6 +258,7 @@ class SupabaseAuthRepository implements AuthRepository {
       farmName: farmName,
       farmAddress: farmAddress,
       farmProduceTypes: farmProduceTypes,
+      onboardingCompleted: result['onboarding_completed'] as bool? ?? true,
     );
   }
 

@@ -5,14 +5,13 @@ import '../../core/repositories/auth_repository.dart';
 import '../../core/utils/color_utils.dart';
 import '../../widget/logo_widget.dart';
 import '../login/login_screen.dart';
-import '../main_shell.dart';
-import '../admin/admin_shell.dart';
+import '../onboarding/onboarding_gate.dart';
 
 /// A clean, modern splash screen that displays the brand logo with a subtle
 /// fade + scale animation, then checks for an existing Supabase session.
 ///
-/// If a valid session is found it routes directly to the correct shell based
-/// on the user's role (farmer/consumer → [MainShell], admin → [AdminShell]).
+/// If a valid session is found it routes directly via [OnboardingGate] based
+/// on the user's role and onboarding state.
 /// Otherwise it routes to [LoginScreen] and the role is determined at login.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -65,9 +64,7 @@ class _SplashScreenState extends State<SplashScreen>
       final session = await authRepo.getCurrentSession();
       if (session != null && mounted) {
         setState(() {
-          _destination = session.role == 'admin'
-              ? const AdminShell()
-              : const MainShell();
+          _destination = OnboardingGate(session: session);
         });
       }
     } catch (_) {
