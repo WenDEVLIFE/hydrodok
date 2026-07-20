@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'user/forum/forum_screen.dart';
 import 'user/map/map_screen.dart';
-import 'user/pest_id/pest_id_screen.dart';
 import 'user/pooling/pooling_screen.dart';
 import 'user/profile/profile_screen.dart';
 
@@ -20,11 +19,10 @@ class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
 
   // Screens ordered to match FitFormBottomNav items:
-  //  0 → Map, 1 → Forum, 2 → Pest ID, 3 → Pooling, 4 → Profile
+  //  0 → Map, 1 → Forum, 2 → Pooling, 3 → Profile
   final List<Widget> _screens = const [
     MapScreen(),
     ForumScreen(),
-    PestIdScreen(),
     PoolingScreen(),
     ProfileScreen(),
   ];
