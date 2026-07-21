@@ -120,22 +120,33 @@ class AdminSettingsService {
     }
   }
 
-  /// Calls the server-side RPC that creates a new admin user in auth.users
-  /// and the public.profiles table.
+  /// Calls the Supabase Edge Function that safely creates a new admin account
+  /// using the Auth Admin API and populates public.profiles.
   Future<void> createAdminUser({
     required String email,
     required String password,
     required String fullName,
   }) async {
     try {
-      await _supabase.rpc(
-        'create_admin_user',
-        params: {
+      final response = await _supabase.functions.invoke(
+        'create-admin-user',
+        body: {
           'email': email,
           'password': password,
           'full_name': fullName,
         },
       );
+
+      if (response.status != 200) {
+        final data = response.data;
+        final errorMsg = data is Map ? data['error'] : 'Unknown error (status ${response.status})';
+        throw Exception(errorMsg);
+      }
+
+      final data = response.data;
+      if (data is Map && data['error'] != null) {
+        throw Exception(data['error']);
+      }
     } catch (e) {
       debugPrint('createAdminUser failed: $e');
       throw Exception('Failed to create admin user: $e');

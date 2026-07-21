@@ -1,7 +1,14 @@
 -- =============================================================================
---  Admin user creation RPC
---  Allows an existing admin to create a new admin account from the admin panel.
---  Run this in Supabase SQL Editor.
+--  DEPRECATED / ARCHIVED: Admin User Creation SQL RPC
+--
+--  NOTE: Direct SQL insertion into auth.users causes Supabase Auth GoTrue 500
+--  errors ("Database error querying schema") due to missing internal auth metadata.
+--  
+--  Admin creation is now handled by the Supabase Edge Function:
+--  `supabase/functions/create-admin-user/index.ts`
+--
+--  Deploy command:
+--  npx supabase functions deploy create-admin-user
 -- =============================================================================
 
 -- Make sure required extensions are available
