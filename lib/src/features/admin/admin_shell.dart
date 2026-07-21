@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../core/model/user_session.dart';
 import '../../core/repositories/auth_repository.dart';
 import '../../core/utils/color_utils.dart';
 import '../../core/utils/typography.dart';
@@ -44,6 +45,34 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _currentIndex = 0;
+  UserSession? _userSession;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserSession();
+  }
+
+  Future<void> _loadUserSession() async {
+    try {
+      final authRepo = context.read<AuthRepository>();
+      final session = await authRepo.getCurrentSession();
+      if (mounted) {
+        setState(() {
+          _userSession = session;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load admin session: $e');
+    }
+  }
+
+  String _getInitials(String name) {
+    final parts = name.trim().split(' ').where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return 'A';
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
 
   Widget _buildContent() {
     switch (_currentIndex) {
@@ -192,63 +221,79 @@ class _AdminShellState extends State<AdminShell> {
           const Spacer(),
 
           // Admin user card
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: ColorUtils.darkCard,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: const BoxDecoration(
-                    color: ColorUtils.forestGreen,
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    'JD',
-                    style: AppTypography.caption(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+          Builder(
+            builder: (context) {
+              final name = (_userSession?.fullName != null && _userSession!.fullName.isNotEmpty)
+                  ? _userSession!.fullName
+                  : 'Admin User';
+              final email = (_userSession?.email != null && _userSession!.email.isNotEmpty)
+                  ? _userSession!.email
+                  : (_userSession?.role.isNotEmpty == true ? _userSession!.role : 'Admin');
+              final initials = _getInitials(name);
+
+              return Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: ColorUtils.darkCard,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Juan Dela Cruz',
-                        style: AppTypography.bodySmall(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: const BoxDecoration(
+                        color: ColorUtils.forestGreen,
+                        shape: BoxShape.circle,
                       ),
-                      Text(
-                        'Office Admin',
+                      alignment: Alignment.center,
+                      child: Text(
+                        initials,
                         style: AppTypography.caption(
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.bodySmall(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            email,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption(
+                              color: Colors.white.withValues(alpha: 0.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        LucideIcons.logOut,
+                        color: Color(0xFFD84040),
+                        size: 18,
+                      ),
+                      tooltip: 'Log Out',
+                      onPressed: () => _handleAdminLogout(context),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(
-                    LucideIcons.logOut,
-                    color: Color(0xFFD84040),
-                    size: 18,
-                  ),
-                  tooltip: 'Log Out',
-                  onPressed: () => _handleAdminLogout(context),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ],
       ),

@@ -24,12 +24,27 @@ BEGIN
   END IF;
 
   -- 3. Delete user associated records from public tables
-  DELETE FROM public.farms WHERE owner_id = target_user_id;
-  DELETE FROM public.products WHERE farmer_id = target_user_id;
-  DELETE FROM public.delivery_addresses WHERE user_id = target_user_id;
-  DELETE FROM public.batch_members WHERE farmer_id = target_user_id;
-  DELETE FROM public.crop_quotes WHERE farmer_id = target_user_id;
-  DELETE FROM public.buyer_crop_requests WHERE buyer_id = target_user_id;
+  -- Forum activity
+  BEGIN DELETE FROM public.forum_likes WHERE user_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.forum_reports WHERE reporter_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.forum_comments WHERE author_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.forum_posts WHERE author_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+
+  -- Ecommerce & Farms
+  BEGIN DELETE FROM public.delivery_addresses WHERE profile_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.delivery_addresses WHERE user_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.order_items WHERE order_id IN (SELECT id FROM public.orders WHERE buyer_id = target_user_id OR farmer_id = target_user_id); EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.orders WHERE buyer_id = target_user_id OR farmer_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.products WHERE farmer_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.farms WHERE owner_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+
+  -- Pooling & Requests
+  BEGIN DELETE FROM public.batch_members WHERE farmer_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.crop_quotes WHERE farmer_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.buyer_crop_requests WHERE buyer_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN DELETE FROM public.issue_reports WHERE user_id = target_user_id; EXCEPTION WHEN OTHERS THEN NULL; END;
+
+  -- Profile
   DELETE FROM public.profiles WHERE id = target_user_id;
 
   -- 4. Delete from auth.users (requires SECURITY DEFINER)
